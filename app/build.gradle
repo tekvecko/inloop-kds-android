@@ -11,8 +11,8 @@ android {
         applicationId "cz.inloop.kds"
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0-PROD"
+        versionCode 2
+        versionName "2.0.0-STANDALONE"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -37,4 +37,5 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.webkit:webkit:1.10.0'
+    implementation 'org.nanohttpd:nanohttpd:2.3.1'
 }

@@ -10,15 +10,26 @@ import androidx.appcompat.app.AppCompatActivity
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private var server: KdsEmbeddedServer? = null
+    private val port = 5005
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Kiosk mód: Trvalé podsvícení a skrytí systémových lišt
+        // 1. Spuštění vestavěného HTTP serveru na pozadí
+        try {
+            server = KdsEmbeddedServer(port, filesDir)
+            server?.start()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 2. Kiosk mód: Trvalé podsvícení a celoobrazovkový režim
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
 
+        // 3. Konfigurace WebView
         webView = WebView(this)
         setContentView(webView)
 
@@ -29,12 +40,11 @@ class MainActivity : AppCompatActivity() {
         settings.allowFileAccess = true
         settings.allowContentAccess = true
         settings.mediaPlaybackRequiresUserGesture = false
-        settings.cacheMode = WebSettings.LOAD_DEFAULT
+        settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                // Auto-retry při startu backendu
-                view?.postDelayed({ view.reload() }, 2000)
+                view?.postDelayed({ view.reload() }, 1500)
             }
         }
 
@@ -44,8 +54,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Lokální InLoop Trust KDS uzel
-        webView.loadUrl("http://127.0.0.1:5005")
+        // Načtení z vlastního vestavěného lokálního serveru
+        webView.loadUrl("http://127.0.0.1:$port")
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -66,9 +76,13 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        server?.stop()
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        // Zablokování opuštění aplikace náhodným stiskem zpět
         if (webView.canGoBack()) {
             webView.goBack()
         }
