@@ -14,6 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("127.0.0.1", port) {
 
     private val storageFile = File(context.filesDir, "kds_standalone_ledger.json")
+    private val menuFile = File(context.filesDir, "kds_daily_menu.json")
     private var lastHash = "0000000000000000000000000000000000000000000000000000000000000000"
     private var lamportClock = 0
     private val records = CopyOnWriteArrayList<JSONObject>()
@@ -21,6 +22,43 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
 
     init {
         loadLedger()
+        initDefaultMenu()
+    }
+
+    private fun initDefaultMenu() {
+        if (!menuFile.exists()) {
+            val defaultMenu = JSONArray().apply {
+                put(JSONObject().apply {
+                    put("id", "MENU_1")
+                    put("name", "Hovězí svíčková na smetaně, houskový knedlík")
+                    put("price", 155.0)
+                    put("allergens", "1, 3, 7, 9, 10")
+                    put("type", "HLAVNI")
+                })
+                put(JSONObject().apply {
+                    put("id", "MENU_2")
+                    put("name", "Kuřecí plátek s bylinkami, grilovaná zelenina")
+                    put("price", 145.0)
+                    put("allergens", "7, 9")
+                    put("type", "HLAVNI")
+                })
+                put(JSONObject().apply {
+                    put("id", "MENU_3")
+                    put("name", "Pečená dýně s quinoou a cizrnou (Veggie)")
+                    put("price", 139.0)
+                    put("allergens", "6, 11")
+                    put("type", "DIETA")
+                })
+                put(JSONObject().apply {
+                    put("id", "POLEVKA_1")
+                    put("name", "Poctivý hovězí vývar s játrovými knedlíčky")
+                    put("price", 45.0)
+                    put("allergens", "1, 3, 9")
+                    put("type", "POLEVKA")
+                })
+            }
+            menuFile.writeText(defaultMenu.toString(2))
+        }
     }
 
     private fun loadLedger() {
@@ -136,7 +174,21 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     val html = context.assets.open("index.html").bufferedReader().use { it.readText() }
                     newFixedLengthResponse(Response.Status.OK, "text/html", html)
                 } catch (e: Exception) {
-                    newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Chyba načtení šablony: ${e.message}")
+                    newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Chyba načtení: ${e.message}")
+                }
+            }
+            uri == "/api/menu" && method == Method.GET -> {
+                val menuContent = if (menuFile.exists()) menuFile.readText() else "[]"
+                newFixedLengthResponse(Response.Status.OK, "application/json", menuContent)
+            }
+            uri == "/api/menu" && method == Method.POST -> {
+                val body = readJsonBody(session)
+                val items = body.optJSONArray("items")
+                if (items != null) {
+                    menuFile.writeText(items.toString(2))
+                    newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"SUCCESS\"}")
+                } else {
+                    newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"status\":\"ERROR\"}")
                 }
             }
             uri == "/api/auth/challenge" && method == Method.GET -> {
@@ -152,9 +204,14 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 val body = readJsonBody(session)
                 val intent = body.optJSONObject("intent") ?: JSONObject()
                 val temp = intent.optDouble("temperature", 0.0)
-                if (temp < 65.0) {
+                val ccp = intent.optString("ccp_type", "CCP1_VYDEJ")
+
+                if (ccp == "CCP1_VYDEJ" && temp < 65.0) {
                     newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", 
-                        "{\"status\":\"REJECTED\",\"message\":\"HACCP STOP: Teplota $temp °C je pod normou (65.0 °C)!\"}")
+                        "{\"status\":\"REJECTED\",\"message\":\"HACCP STOP: Výdejní teplota $temp °C je pod zákonnou normou 65.0 °C!\"}")
+                } else if (ccp == "CCP2_ZCHLAZENI" && temp > 4.0) {
+                    newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", 
+                        "{\"status\":\"REJECTED\",\"message\":\"HACCP STOP: Zchlazení $temp °C přesahuje limit 4.0 °C!\"}")
                 } else {
                     newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"SUCCESS\"}")
                 }
@@ -202,6 +259,12 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
             uri == "/audit" -> {
                 newFixedLengthResponse(Response.Status.OK, "text/html", renderAuditHtml())
             }
+            uri == "/api/export/pohoda.xml" -> {
+                newFixedLengthResponse(Response.Status.OK, "application/xml", renderPohodaXml())
+            }
+            uri == "/api/export/isdoc.xml" -> {
+                newFixedLengthResponse(Response.Status.OK, "application/xml", renderIsdocXml())
+            }
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "404 Not Found")
         }
 
@@ -213,6 +276,51 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         response.addHeader("Access-Control-Allow-Origin", "*")
         response.addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         response.addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    }
+
+    private fun renderPohodaXml(): String {
+        val dispatched = records.filter { it.optJSONObject("intent")?.optString("action") == "DISPATCH_BATCH" }
+        val total = dispatched.sumOf { 
+            val it = it.getJSONObject("intent")
+            it.optInt("portions", 0) * it.optDouble("unit_price", 0.0) 
+        }
+
+        val itemsXml = StringBuilder()
+        dispatched.forEach { r ->
+            val it = r.getJSONObject("intent")
+            itemsXml.append("""
+                <inv:invoiceItem>
+                    <inv:text>${it.optString("item_name")} (Klient: ${it.optString("client_name")}, Alergeny: ${it.optString("allergens")})</inv:text>
+                    <inv:quantity>${it.optInt("portions")}</inv:quantity>
+                    <inv:unit>porce</inv:unit>
+                    <inv:unitPrice>${it.optDouble("unit_price")}</inv:unitPrice>
+                    <inv:payVAT>true</inv:payVAT>
+                    <inv:rateVAT>12</inv:rateVAT>
+                </inv:invoiceItem>
+            """.trimIndent())
+        }
+
+        return """<?xml version="1.0" encoding="UTF-8"?>
+<dat:dataPack xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
+              xmlns:inv="http://www.stormware.cz/schema/version_2/invoice.xsd"
+              id="INLOOP_${System.currentTimeMillis()}" version="2.0">
+    <dat:dataPackItem id="INV_001" version="2.0">
+        <inv:invoice version="2.0">
+            <inv:invoiceHeader>
+                <inv:invoiceType>issuedInvoice</inv:invoiceType>
+                <inv:date>${SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())}</inv:date>
+                <inv:text>Měsíční vyúčtování stravného dle nepopiratelného KDS protokolu</inv:text>
+            </inv:invoiceHeader>
+            <inv:invoiceDetail>
+                $itemsXml
+            </inv:invoiceDetail>
+        </inv:invoice>
+    </dat:dataPackItem>
+</dat:dataPack>"""
+    }
+
+    private fun renderIsdocXml(): String {
+        return """<?xml version="1.0" encoding="UTF-8"?><Invoice xmlns="http://isdoc.cz/namespace/2013" version="6.0.2"><ID>INLOOP-${System.currentTimeMillis()}</ID></Invoice>"""
     }
 
     private fun renderAuditHtml(): String {
@@ -233,6 +341,9 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
             val temp = it.optDouble("temperature", 0.0)
             val action = it.optString("action", "EXPEDICE")
             val itemName = it.optString("item_name", it.optString("item", "Položka"))
+            val client = it.optString("client_name", "Běžný výdej")
+            val chef = it.optString("chef_name", "Šéfkuchař")
+            val allergens = it.optString("allergens", "-")
             val portions = it.optInt("portions", 0)
             val cHash = r.optString("crystal_hash", "")
             val pHash = r.optString("parent_hash", "")
@@ -248,7 +359,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 <tr>
                     <td style='text-align:center;font-weight:bold;'>#${r.optInt("lamport_tick", i + 1)}</td>
                     <td>$formattedDate</td>
-                    <td><b>$action</b><br>$itemName</td>
+                    <td><b>$action</b>: $itemName<br><small style='color:#555;'>Odběratel: <b>$client</b> | Kuchař: <b>$chef</b> | Alergeny: <b>$allergens</b></small></td>
                     <td style='text-align:right;'>$portions ks</td>
                     <td style='text-align:right;font-weight:bold;'>$temp °C</td>
                     <td style='text-align:center;'>$haccpOk</td>
@@ -257,7 +368,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
             """.trimIndent())
         }
 
-        val statusText = if (chainValid && records.isNotEmpty()) "INTEGRITA_OVĚŘENA_PLATNÁ" else if (records.isEmpty()) "LEDGER_PRÁZDNÝ_ČEKÁ_NA_VÁRKY" else "NEPLATNÝ_ŘETĚZEC"
+        val statusText = if (chainValid && records.isNotEmpty()) "INTEGRITA_OVĚŘENA_PLATNÁ" else if (records.isEmpty()) "LEDGER_PRÁZDNÝ" else "NEPLATNÝ_ŘETĚZEC"
         val statusClass = if (chainValid && records.isNotEmpty()) "valid" else "pending"
 
         return """
@@ -268,7 +379,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
     <title>Úřední Protokol HACCP & Kauzální Integrity</title>
     <style>
         body { font-family: 'Times New Roman', serif; background: #eaedf1; color: #111; padding: 1.5rem; }
-        .cert-card { max-width: 900px; margin: auto; background: #fff; border: 3px double #1a365d; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.1); position: relative; }
+        .cert-card { max-width: 950px; margin: auto; background: #fff; border: 3px double #1a365d; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.1); position: relative; }
         .stamp { position: absolute; top: 2rem; right: 2rem; border: 2px solid green; padding: 6px 12px; color: green; font-family: monospace; font-weight: bold; font-size: 12px; }
         .stamp.pending { border-color: #f59e0b; color: #b45309; }
         .header { text-align: center; border-bottom: 2px solid #1a365d; padding-bottom: 0.8rem; margin-bottom: 1.2rem; }
@@ -280,28 +391,31 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
         th { background: #f1f5f9; }
         .legal { font-size: 0.72rem; color: #333; border-top: 1px solid #333; padding-top: 0.8rem; margin-top: 1.2rem; font-family: Arial, sans-serif; line-height: 1.4; }
-        .btn-bar { max-width: 900px; margin: auto; margin-bottom: 0.8rem; display: flex; justify-content: space-between; }
+        .btn-bar { max-width: 950px; margin: auto; margin-bottom: 0.8rem; display: flex; justify-content: space-between; gap: 8px; }
         .btn { background: #1a365d; color: #fff; border: none; padding: 0.6rem 1.2rem; font-weight: bold; cursor: pointer; border-radius: 4px; font-family: Arial, sans-serif; }
     </style>
 </head>
 <body>
     <div class="btn-bar">
-        <button class="btn" onclick="window.print()">TISKNOUT PROTOKOL (PDF)</button>
-        <button class="btn" style="background:#059669;" onclick="verifyChain()">OVĚŘIT MATEMATICKOU INTEGRITU</button>
+        <button class="btn" onclick="window.print()">TISKNOUT DO PDF</button>
+        <div>
+            <a href="/api/export/pohoda.xml" target="_blank" class="btn" style="background:#2563eb; text-decoration:none;">POHODA XML</a>
+            <button class="btn" style="background:#059669;" onclick="verifyChain()">OVĚŘIT MATEMATICKOU INTEGRITU</button>
+        </div>
     </div>
 
     <div class="cert-card">
         <div class="stamp $statusClass">$statusText</div>
         <div class="header">
             <div class="title">Protokol o Průkazu Shody HACCP a Digitální Kontinuity</div>
-            <div class="subtitle">Vydáno dle Nařízení ES č. 852/2004, Nařízení EU č. 910/2014 (eIDAS) a Zákona č. 258/2000 Sb.</div>
+            <div class="subtitle">Dle Nařízení ES č. 852/2004, Nařízení EU č. 910/2014 (eIDAS) a Zákona č. 258/2000 Sb.</div>
         </div>
 
         <div class="meta-grid">
             <div class="meta-box">
-                <b>Provozovna:</b> KDS Node #5005 (Standalone Android)<br>
-                <b>Typ měření:</b> CCP1 (Kritický bod – Teplota výdeje)<br>
-                <b>Zákonná mezní hodnota:</b> &ge; 65.0 °C (teplé pokrmy)
+                <b>Výrobní uzel:</b> KDS Node #5005 (Standalone Android)<br>
+                <b>Typ měření:</b> CCP1 (Výdej &ge; 65.0 °C) / CCP2 (Zchlazení &le; 4.0 °C)<br>
+                <b>Alergenní evidence:</b> EU 1169/2011 (Skupiny 1–14)
             </div>
             <div class="meta-box">
                 <b>Root Merkle Hash:</b><br>
@@ -315,7 +429,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 <tr>
                     <th style="width:35px;">Tick</th>
                     <th style="width:125px;">Čas zápisu</th>
-                    <th>Položka / Várka</th>
+                    <th>Položka, Odběratel & Alergeny</th>
                     <th style="width:50px;">Porce</th>
                     <th style="width:65px;">Teplota</th>
                     <th style="width:85px;">HACCP</th>
@@ -329,9 +443,8 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
 
         <div class="legal">
             <b>ZÁKONNÁ DOLOŽKA A PROHLÁŠENÍ O INTEGRITĚ:</b><br>
-            1. <b>eIDAS Čl. 25 a 32:</b> Každý jednotlivý záznam byl autorizován přímo v hardwarovém procesoru (TEE) odpovědného šéfkuchaře. Zpětná modifikace nebo vymazání záznamu je matematicky vyloučeno bez destrukce hashovacího stromu.<br>
-            2. <b>Hygienická shoda (ES 852/2004):</b> Systém kontinuálně monitoruje dodržení teplotního řetězce při dohotovení a expedici pokrmů.<br>
-            3. <b>Datum vyhotovení protokolu:</b> $genTime
+            1. <b>eIDAS Čl. 25 a 32:</b> Každý záznam byl autorizován přímo v TEE procesoru zařízení bez možnosti zpětné manipulace.<br>
+            2. <b>Vyhotoveno:</b> $genTime
         </div>
     </div>
 
@@ -342,7 +455,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 .then(data => {
                     const recs = data.records;
                     if (!recs || recs.length === 0) {
-                        alert("Ledger je momentálně prázdný. Zapište první várku.");
+                        alert("Ledger je prázdný.");
                         return;
                     }
                     let valid = true;
@@ -353,9 +466,9 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                         }
                     }
                     if (valid) {
-                        alert("KAUZÁLNÍ INTEGRITA 100% OVĚŘENA:\n- Počet krystalů: " + recs.length + "\n- Žádný záznam nebyl manipulován ani přeskočen.\n- Merkle Root: " + data.merkle_root.substring(0, 16) + "...");
+                        alert("KAUZÁLNÍ INTEGRITA 100% PLATNÁ:\n- Krystalů: " + recs.length + "\n- Merkle Root: " + data.merkle_root.substring(0, 16) + "...");
                     } else {
-                        alert("VAROVÁNÍ: Kauzální řetězec je poškozen!");
+                        alert("VAROVÁNÍ: Řetězec je porušen!");
                     }
                 });
         }
