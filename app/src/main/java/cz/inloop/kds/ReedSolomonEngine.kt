@@ -11,7 +11,7 @@ class ReedSolomonEngine(private val nsym: Int = 16) {
             log[x] = i
             x = x shl 1
             if (x >= 256) {
-                x = x xor 0x11d // Standardní Galois polynom x^8 + x^4 + x^3 + x^2 + 1
+                x = x xor 0x11d
             }
         }
         for (i in 255 until 512) {
@@ -71,7 +71,6 @@ class ReedSolomonEngine(private val nsym: Int = 16) {
         val reEncoded = encode(rawData)
         for (i in block.indices) {
             if (block[i] != reEncoded[i]) {
-                // Paritní nesoulad (detekována chyba bloku)
                 return null
             }
         }

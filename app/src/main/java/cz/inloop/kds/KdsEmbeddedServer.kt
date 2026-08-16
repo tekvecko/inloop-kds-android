@@ -22,6 +22,10 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
     private val workersFile = File(context.filesDir, "kds_zk_workers.json")
     private val rsEngine = ReedSolomonEngine(16)
 
+    private val mimeJson = "application/json; charset=UTF-8"
+    private val mimeHtml = "text/html; charset=UTF-8"
+    private val mimePlain = "text/plain; charset=UTF-8"
+
     private var lastHash = "0000000000000000000000000000000000000000000000000000000000000000"
     private var lamportClock = 0
     private val records = CopyOnWriteArrayList<JSONObject>()
@@ -60,10 +64,10 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
             }
             zkWorkers.add(obj)
             val arr = JSONArray().apply { put(obj) }
-            workersFile.writeText(arr.toString(2))
+            workersFile.writeText(arr.toString(2), Charsets.UTF_8)
         } else {
             try {
-                val arr = JSONArray(workersFile.readText())
+                val arr = JSONArray(workersFile.readText(Charsets.UTF_8))
                 for (i in 0 until arr.length()) {
                     zkWorkers.add(arr.getJSONObject(i))
                 }
@@ -197,7 +201,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     put("allergens", "1, 3, 9")
                 })
             }
-            menuFile.writeText(defaultMenu.toString(2))
+            menuFile.writeText(defaultMenu.toString(2), Charsets.UTF_8)
         }
     }
 
@@ -227,7 +231,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         val method = session.method
 
         if (Method.OPTIONS == method) {
-            val res = newFixedLengthResponse(Response.Status.OK, "text/plain; charset=UTF-8", "")
+            val res = newFixedLengthResponse(Response.Status.OK, mimePlain, "")
             addCorsHeaders(res)
             return res
         }
@@ -235,10 +239,10 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         val response = when {
             uri == "/" -> {
                 try {
-                    val html = context.assets.open("index.html").bufferedReader().use { it.readText() }
-                    newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", html)
+                    val html = context.assets.open("index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    newFixedLengthResponse(Response.Status.OK, mimeHtml, html)
                 } catch (e: Exception) {
-                    newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain; charset=UTF-8", "Chyba: ${e.message}")
+                    newFixedLengthResponse(Response.Status.INTERNAL_ERROR, mimePlain, "Chyba načtení šablony: ${e.message}")
                 }
             }
             uri == "/api/workers" && method == Method.GET -> {
@@ -250,7 +254,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                         put("role", it.getString("role"))
                     })
                 }
-                newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", arr.toString())
+                newFixedLengthResponse(Response.Status.OK, mimeJson, arr.toString())
             }
             uri == "/api/workers/add" && method == Method.POST -> {
                 val body = readJsonBody(session)
@@ -268,13 +272,13 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
 
                 val arr = JSONArray()
                 zkWorkers.forEach { arr.put(it) }
-                workersFile.writeText(arr.toString(2))
+                workersFile.writeText(arr.toString(2), Charsets.UTF_8)
 
-                newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", "{\"status\":\"SUCCESS\",\"commitment\":\"$comm\"}")
+                newFixedLengthResponse(Response.Status.OK, mimeJson, "{\"status\":\"SUCCESS\",\"commitment\":\"$comm\"}")
             }
             uri == "/api/menu" && method == Method.GET -> {
-                val menuContent = if (menuFile.exists()) menuFile.readText() else "[]"
-                newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", menuContent)
+                val menuContent = if (menuFile.exists()) menuFile.readText(Charsets.UTF_8) else "[]"
+                newFixedLengthResponse(Response.Status.OK, mimeJson, menuContent)
             }
             uri == "/api/auth/challenge" && method == Method.GET -> {
                 val bytes = ByteArray(32)
@@ -285,8 +289,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 synchronized(activeChallenges) {
                     activeChallenges[challenge] = System.currentTimeMillis()
                 }
-                newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", 
-                    "{\"challenge\":\"$challenge\",\"merkle_root\":\"$merkleRoot\"}")
+                newFixedLengthResponse(Response.Status.OK, mimeJson, "{\"challenge\":\"$challenge\",\"merkle_root\":\"$merkleRoot\"}")
             }
             uri == "/api/crystallize" && method == Method.POST -> {
                 val body = readJsonBody(session)
@@ -300,7 +303,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     activeChallenges.remove(challenge) != null
                 }
                 if (!isValidChallenge) {
-                    newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json; charset=UTF-8", "{\"ui_feedback\":\"ERROR\",\"message\":\"Neplatná výzva!\"}")
+                    newFixedLengthResponse(Response.Status.FORBIDDEN, mimeJson, "{\"ui_feedback\":\"ERROR\",\"message\":\"Neplatná výzva!\"}")
                 } else {
                     val merkleRoot = computeWorkersMerkleRoot()
                     val canonicalPayload = intent.toString() + ":" + challenge + ":" + merkleRoot
@@ -308,8 +311,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     val isWorkerInSet = zkWorkers.any { it.getString("commitment") == workerComm }
 
                     if (!isSignatureValid || !isWorkerInSet) {
-                        newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json; charset=UTF-8", 
-                            "{\"ui_feedback\":\"ERROR\",\"message\":\"ZK STOP: Matematické ověření TEE podpisu nebo členství selhalo!\"}")
+                        newFixedLengthResponse(Response.Status.FORBIDDEN, mimeJson, "{\"ui_feedback\":\"ERROR\",\"message\":\"ZK STOP: Matematické ověření TEE podpisu nebo členství selhalo!\"}")
                     } else {
                         val unlinkableNullifier = sha256("$fidoId:$challenge:${intent.optDouble("requested_at")}")
 
@@ -336,19 +338,19 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                         }
 
                         val stored = appendCrystalBin(crystal)
-                        newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", "{\"ui_feedback\":\"SUCCESS\",\"crystal\":$stored}")
+                        newFixedLengthResponse(Response.Status.OK, mimeJson, "{\"ui_feedback\":\"SUCCESS\",\"crystal\":$stored}")
                     }
                 }
             }
             uri == "/api/records" && method == Method.GET -> {
                 val arr = JSONArray()
                 records.forEach { arr.put(it) }
-                newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", "{\"records\":$arr}")
+                newFixedLengthResponse(Response.Status.OK, mimeJson, "{\"records\":$arr}")
             }
             uri == "/audit" -> {
-                newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", renderZkAuditHtml())
+                newFixedLengthResponse(Response.Status.OK, mimeHtml, renderZkAuditHtml())
             }
-            else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain; charset=UTF-8", "404 Not Found")
+            else -> newFixedLengthResponse(Response.Status.NOT_FOUND, mimePlain, "404 Not Found")
         }
 
         addCorsHeaders(response)
