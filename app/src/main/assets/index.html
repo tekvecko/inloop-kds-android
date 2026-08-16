@@ -3,680 +3,562 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>InLoop Trust KDS Enterprise</title>
+    <title>InLoop ATM-KDS</title>
     <style>
         :root {
-            --bg-base: #030712;
-            --surface-glass: rgba(15, 23, 42, 0.85);
-            --surface-card: rgba(30, 41, 59, 0.55);
-            --surface-active: rgba(56, 189, 248, 0.18);
-            --stroke-glass: rgba(255, 255, 255, 0.09);
-            --accent-cyan: #38bdf8;
-            --emerald: #10b981;
-            --amber: #f59e0b;
-            --rose: #f43f5e;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --text-dim: #64748b;
+            --bg-atm: #040914;
+            --screen-bg: #0a1324;
+            --btn-bg: #132238;
+            --btn-border: #1e3a5f;
+            --btn-active: #00d2ff;
+            --cyan: #00d2ff;
+            --cyan-glow: rgba(0, 210, 255, 0.35);
+            --green: #00ff88;
+            --green-glow: rgba(0, 255, 136, 0.35);
+            --amber: #ffaa00;
+            --red: #ff3366;
+            --text-main: #ffffff;
+            --text-dim: #7d96b3;
         }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; user-select: none; }
         
         body {
-            background: var(--bg-base);
+            background: var(--bg-atm);
             color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-            min-height: 100dvh;
-            padding: env(safe-area-inset-top, 0.5rem) env(safe-area-inset-right, 0.5rem) env(safe-area-inset-bottom, 0.5rem) env(safe-area-inset-left, 0.5rem);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            padding: env(safe-area-inset-top, 0.4rem) env(safe-area-inset-right, 0.4rem) env(safe-area-inset-bottom, 0.4rem) env(safe-area-inset-left, 0.4rem);
+            overflow: hidden;
         }
 
-        /* Horní lišta s Food Cost indikátorem zisku */
-        .nav-bar {
+        /* ATM Horní Stavový Panel */
+        .atm-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 0.5rem 0.8rem;
-            background: var(--surface-glass);
-            border: 1px solid var(--stroke-glass);
-            border-radius: 12px;
+            background: #08101e;
+            border-bottom: 2px solid var(--btn-border);
+            margin-bottom: 0.4rem;
         }
-        .brand { font-size: 0.95rem; font-weight: 800; color: #fff; }
-        .brand span { color: var(--accent-cyan); }
+        .atm-logo { font-size: 1rem; font-weight: 900; letter-spacing: 1px; color: #fff; }
+        .atm-logo span { color: var(--cyan); }
         
-        .profit-capsule {
+        .atm-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+        .status-pill {
+            background: rgba(0, 255, 136, 0.12);
+            border: 1px solid var(--green);
+            color: var(--green);
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            text-transform: uppercase;
+        }
+
+        /* Hlavní ATM Obrazovka */
+        .atm-screen {
+            flex: 1;
+            background: var(--screen-bg);
+            border: 2px solid var(--btn-border);
+            border-radius: 14px;
+            padding: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.5);
+        }
+
+        /* KROKY (ATM Step Header) */
+        .step-title-box {
+            text-align: center;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-bottom: 0.4rem;
+        }
+        .step-num { font-size: 0.7rem; font-weight: 800; color: var(--cyan); text-transform: uppercase; letter-spacing: 1px; }
+        .step-title { font-size: 1.25rem; font-weight: 900; color: #fff; margin-top: 0.1rem; }
+
+        /* KROK 1: VELKÉ DLAŽDICE MENU */
+        .atm-grid-2x2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.6rem;
+            flex: 1;
+            align-content: stretch;
+        }
+        .atm-tile {
+            background: var(--btn-bg);
+            border: 2px solid var(--btn-border);
+            border-radius: 12px;
+            padding: 0.8rem;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: transform 0.1s, border-color 0.15s, background 0.15s;
+        }
+        .atm-tile:active { transform: scale(0.96); }
+        .atm-tile.selected {
+            border-color: var(--cyan);
+            background: rgba(0, 210, 255, 0.18);
+            box-shadow: 0 0 20px var(--cyan-glow);
+        }
+        .tile-id { font-size: 0.8rem; font-weight: 900; color: var(--cyan); }
+        .tile-name { font-size: 1.05rem; font-weight: 800; color: #fff; line-height: 1.25; margin: 0.25rem 0; }
+        .tile-price { font-size: 0.85rem; font-weight: 700; color: var(--green); }
+
+        /* KROK 2: VÝBĚR PORCÍ JAKO Z BANKOMATU */
+        .atm-portions-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.6rem;
+            flex: 1;
+            align-content: center;
+        }
+        .atm-btn-amount {
+            background: var(--btn-bg);
+            border: 2px solid var(--btn-border);
+            color: #fff;
+            font-size: 1.5rem;
+            font-weight: 900;
+            border-radius: 12px;
+            padding: 1.2rem 0.5rem;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.1s;
+        }
+        .atm-btn-amount:active { transform: scale(0.95); }
+        .atm-btn-amount.selected {
+            border-color: var(--cyan);
+            background: var(--cyan);
+            color: #000;
+            box-shadow: 0 0 20px var(--cyan-glow);
+        }
+        .amount-sub { font-size: 0.7rem; font-weight: 700; display: block; opacity: 0.8; }
+
+        /* KROK 3: TEPLOTA DISPLEJ */
+        .temp-display-box {
+            background: #000;
+            border: 2px solid var(--green);
+            border-radius: 14px;
+            padding: 1.2rem;
+            text-align: center;
+            margin: auto;
+            width: 100%;
+            max-width: 320px;
+            box-shadow: 0 0 25px var(--green-glow);
+        }
+        .temp-digital { font-size: 3rem; font-weight: 900; color: var(--green); font-family: monospace; }
+        .temp-haccp-status { font-size: 0.85rem; font-weight: 800; color: var(--green); margin-top: 0.3rem; }
+
+        .temp-stepper-row {
             display: flex;
             gap: 0.6rem;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            padding: 0.25rem 0.6rem;
-            border-radius: 8px;
-            font-size: 0.72rem;
-            font-weight: 700;
+            max-width: 320px;
+            margin: 0.8rem auto 0 auto;
+            width: 100%;
         }
-        .profit-val { color: var(--emerald); font-weight: 900; }
-
-        .btn-top {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--stroke-glass);
-            color: var(--text-main);
-            padding: 0.25rem 0.45rem;
-            border-radius: 6px;
-            font-size: 0.68rem;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .workspace {
-            display: grid;
-            grid-template-columns: 1.35fr 1fr;
-            gap: 0.5rem;
+        .btn-temp-step {
             flex: 1;
-            min-height: 0;
-        }
-        @media (orientation: portrait), (max-width: 850px) {
-            .workspace { grid-template-columns: 1fr; display: flex; flex-direction: column; }
-        }
-
-        .glass-panel {
-            background: var(--surface-glass);
-            border: 1px solid var(--stroke-glass);
-            border-radius: 14px;
-            padding: 0.75rem;
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-        }
-
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.45rem;
-            font-size: 0.7rem;
-            font-weight: 800;
-            color: var(--text-dim);
-            text-transform: uppercase;
-        }
-
-        /* Odběratel Selector */
-        .client-selector {
-            display: flex;
-            gap: 0.25rem;
-            margin-bottom: 0.5rem;
-            overflow-x: auto;
-        }
-        .client-chip {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid var(--stroke-glass);
-            color: var(--text-muted);
-            padding: 0.25rem 0.5rem;
-            border-radius: 6px;
-            font-size: 0.68rem;
-            font-weight: 700;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-        .client-chip.active {
-            background: rgba(56, 189, 248, 0.15);
-            border-color: var(--accent-cyan);
+            background: var(--btn-bg);
+            border: 2px solid var(--btn-border);
             color: #fff;
-        }
-
-        /* Menu Grid */
-        .menu-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.4rem;
-            margin-bottom: 0.5rem;
-        }
-        .dish-card {
-            background: var(--surface-card);
-            border: 1px solid var(--stroke-glass);
+            font-size: 1.2rem;
+            font-weight: 900;
             border-radius: 10px;
-            padding: 0.55rem;
+            padding: 0.9rem;
             cursor: pointer;
-            min-height: 64px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
         }
-        .dish-card.active {
-            background: var(--surface-active);
-            border-color: var(--accent-cyan);
-            box-shadow: 0 0 12px rgba(56, 189, 248, 0.22);
-        }
-        .dish-top-row { display: flex; justify-content: space-between; font-size: 0.65rem; font-weight: 800; color: var(--accent-cyan); }
-        .dish-name { font-size: 0.78rem; font-weight: 700; color: #fff; line-height: 1.2; margin: 0.15rem 0; }
-        .dish-sub { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--text-dim); }
+        .btn-temp-step:active { background: var(--cyan); color: #000; }
 
-        /* Controls */
-        .metrics-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.4rem;
-            margin-bottom: 0.5rem;
+        /* SPODNÍ NAVIGAČNÍ / AKČNÍ LIŠTA */
+        .atm-footer {
+            display: flex;
+            gap: 0.6rem;
+            margin-top: 0.6rem;
         }
-        .metric-tile {
-            background: rgba(15, 23, 42, 0.5);
-            border: 1px solid var(--stroke-glass);
-            border-radius: 10px;
-            padding: 0.45rem;
-        }
-        .metric-val-box {
-            background: rgba(0,0,0,0.3);
-            border-radius: 6px;
-            padding: 0.25rem;
-            text-align: center;
-            margin: 0.2rem 0;
+        .btn-atm-main {
+            flex: 2;
+            background: linear-gradient(135deg, #00d2ff, #0077ff);
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            padding: 1.1rem;
             font-size: 1.15rem;
             font-weight: 900;
-        }
-        .stepper { display: flex; gap: 0.15rem; }
-        .btn-step {
-            flex: 1;
-            padding: 0.4rem 0.1rem;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid var(--stroke-glass);
-            color: #fff;
-            font-weight: 800;
-            font-size: 0.75rem;
-            border-radius: 6px;
             cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 20px var(--cyan-glow);
         }
-        .btn-step:active { background: var(--accent-cyan); color: #000; }
-
-        .actions-cluster {
-            display: grid;
-            grid-template-columns: 1.4fr 1fr 0.8fr;
-            gap: 0.4rem;
-            margin-top: auto;
-        }
-        .btn-act {
-            padding: 0.8rem 0.3rem;
-            border-radius: 10px;
-            border: none;
-            font-size: 0.8rem;
-            font-weight: 900;
+        .btn-atm-main:active { transform: scale(0.98); }
+        .btn-atm-back {
+            flex: 1;
+            background: rgba(255,255,255,0.06);
+            border: 2px solid var(--btn-border);
+            color: #fff;
+            border-radius: 12px;
+            padding: 1.1rem;
+            font-size: 1rem;
+            font-weight: 800;
             cursor: pointer;
             text-transform: uppercase;
         }
-        .btn-dispatch { background: linear-gradient(135deg, #38bdf8, #2563eb); color: #000; }
-        .btn-accept { background: rgba(255, 255, 255, 0.08); border: 1px solid var(--stroke-glass); color: #fff; }
-        .btn-print { background: rgba(16, 185, 129, 0.2); border: 1px solid var(--emerald); color: var(--emerald); }
 
-        /* Feed */
-        .stream-container {
-            flex: 1;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 0.35rem;
-            max-height: 480px;
-        }
-        @media (orientation: portrait) { .stream-container { max-height: 200px; } }
-        .stream-card {
-            background: rgba(15, 23, 42, 0.55);
-            border: 1px solid var(--stroke-glass);
-            border-radius: 8px;
-            padding: 0.55rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .stream-title { font-size: 0.78rem; font-weight: 800; color: #fff; }
-        .stream-meta { font-size: 0.65rem; color: var(--text-dim); margin-top: 0.1rem; }
-
-        /* Tiskový štítek (Print Preview & ESC/POS Modal) */
-        .label-preview {
-            background: #fff; color: #000; font-family: 'Courier New', monospace; padding: 1rem; border-radius: 4px; font-size: 11px; line-height: 1.3; max-width: 240px; margin: auto; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
-
-        /* Gatekeeper & Modals */
-        .gatekeeper-screen {
-            position: fixed; inset: 0; background: radial-gradient(circle at center, #0f172a 0%, #030712 100%);
+        /* MODALY & GATEKEEPER */
+        .overlay {
+            position: fixed; inset: 0; background: rgba(3, 7, 18, 0.94); backdrop-filter: blur(25px);
             z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 1.5rem; text-align: center;
         }
-        .gatekeeper-screen.unlocked { opacity: 0; visibility: hidden; pointer-events: none; }
-        .input-chef {
-            background: rgba(255,255,255,0.06); border: 1px solid var(--stroke-glass); color: #fff;
-            padding: 0.75rem 1rem; border-radius: 10px; font-size: 1rem; width: 100%; max-width: 320px; margin-bottom: 1rem; text-align: center;
+        .overlay.hidden { display: none; }
+        .atm-dialog {
+            background: #0d1b2e;
+            border: 2px solid var(--cyan);
+            border-radius: 20px;
+            padding: 2rem;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 0 40px rgba(0, 210, 255, 0.3);
         }
-
-        .modal {
-            position: fixed; inset: 0; background: rgba(3, 7, 18, 0.88); backdrop-filter: blur(20px);
-            display: flex; justify-content: center; align-items: center; z-index: 9999; opacity: 0; pointer-events: none; padding: 1rem;
-        }
-        .modal.active { opacity: 1; pointer-events: auto; }
-        .modal-sheet {
-            background: rgba(30, 41, 59, 0.95); border: 1px solid var(--stroke-glass); border-radius: 16px;
-            padding: 1.2rem; max-width: 420px; width: 100%; max-height: 85vh; overflow-y: auto; text-align: center;
+        .dialog-icon { font-size: 3.5rem; margin-bottom: 0.8rem; }
+        .dialog-title { font-size: 1.4rem; font-weight: 900; margin-bottom: 0.4rem; }
+        .dialog-desc { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.4; }
+        .dialog-btn {
+            background: var(--cyan);
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            padding: 1rem;
+            width: 100%;
+            font-size: 1.1rem;
+            font-weight: 900;
+            cursor: pointer;
+            text-transform: uppercase;
         }
     </style>
 </head>
 <body>
 
-    <!-- ONBOARDING BRÁNA -->
-    <div id="gatekeeper" class="gatekeeper-screen">
-        <div style="font-size:3.5rem; margin-bottom:0.8rem;">👨‍🍳</div>
-        <h2 style="color:#fff; margin-bottom:0.4rem;">INLOOP TRUST KDS</h2>
-        <p style="color:var(--text-muted); font-size:0.85rem; max-width:320px; margin-bottom:1.2rem;">
-            Zadejte jméno šéfkuchaře pro tuto směnu a přiložte prst k senzoru pro ukování TEE klíče.
-        </p>
-        <input type="text" id="chef-name-input" class="input-chef" value="Šéfkuchař Zbyněk" placeholder="Jméno odpovědné osoby">
-        <button onclick="enrollChef()" style="background:linear-gradient(135deg, #38bdf8, #2563eb); color:#000; border:none; border-radius:12px; padding:1rem 2rem; font-size:0.95rem; font-weight:900; cursor:pointer;">
-            ✦ UKOVAT TEE KLÍČ & VSTOUPIT
-        </button>
-    </div>
-
-    <!-- HLAVNÍ KDS -->
-    <div class="nav-bar">
-        <div class="brand"><span>INLOOP</span> TRUST KDS</div>
-        
-        <!-- Food Cost / Ziskovost v reálném čase -->
-        <div class="profit-capsule">
-            <span>Tržby: <b id="profit-rev">0 Kč</b></span>
-            <span>FoodCost: <b id="profit-fc" style="color:var(--rose);">0 Kč</b></span>
-            <span>Zisk: <span class="profit-val" id="profit-net">0 Kč</span></span>
-        </div>
-
-        <div style="display:flex; gap:0.3rem;">
-            <a href="/portal" target="_blank" class="btn-top" style="color:var(--accent-cyan); text-decoration:none;">B2B Portál</a>
-            <button class="btn-top" onclick="openMenuEditor()">✎ Menu</button>
+    <!-- STAVOVÝ ŘÁDEK -->
+    <div class="atm-header">
+        <div class="atm-logo">INLOOP <span>ATM-KDS</span></div>
+        <div class="atm-status">
+            <span id="client-badge" style="color:var(--cyan);">JÍDELNA VÝDEJ</span>
+            <div class="status-pill" id="chef-badge">ŠÉFKUCHAŘ</div>
         </div>
     </div>
 
-    <div class="workspace">
-        <div class="glass-panel">
-            <!-- Výběr klienta -->
-            <div class="section-header">
-                <span>1. Odběratel / Trasa</span>
-                <span id="b2b-orders-count" style="color:var(--accent-cyan); font-weight:700;">B2B Objednávek: 0</span>
-            </div>
-            <div class="client-selector">
-                <div class="client-chip active" onclick="selectClient(this, 'Jídelna - přímý výdej')">Jídelna výdej</div>
-                <div class="client-chip" onclick="selectClient(this, 'Siemens Brno')">Siemens Brno</div>
-                <div class="client-chip" onclick="selectClient(this, 'Honeywell')">Honeywell</div>
-                <div class="client-chip" onclick="selectClient(this, 'Rozvoz Trasa A')">Rozvoz Trasa A</div>
-            </div>
+    <!-- BANKOMATOVÁ OBRAZOVKA -->
+    <div class="atm-screen">
 
-            <!-- Menu Grid -->
-            <div class="section-header">
-                <span>2. Položka denního menu</span>
-                <span style="font-size:0.65rem; color:var(--emerald);">CCP1 (&ge;65°C)</span>
+        <!-- KROK 1: VOLBA POKRMU -->
+        <div id="step-1" class="step-view">
+            <div class="step-title-box">
+                <div class="step-num">KROK 1 ZE 3</div>
+                <div class="step-title">ZVOLTE POLOŽKU MENU</div>
             </div>
-            <div class="menu-grid" id="dishes-container"></div>
+            <div class="atm-grid-2x2" id="menu-grid"></div>
+        </div>
 
-            <!-- Parametry -->
-            <div class="metrics-row">
-                <div class="metric-tile">
-                    <span style="font-size:0.65rem; color:var(--text-dim); font-weight:700;">PORCE</span>
-                    <div class="metric-val-box" id="disp-portions">45</div>
-                    <div class="stepper">
-                        <button class="btn-step" onclick="modPortions(-5)">-5</button>
-                        <button class="btn-step" onclick="modPortions(-1)">-1</button>
-                        <button class="btn-step" onclick="modPortions(1)">+1</button>
-                        <button class="btn-step" onclick="modPortions(5)">+5</button>
-                    </div>
-                </div>
-
-                <div class="metric-tile">
-                    <span style="font-size:0.65rem; color:var(--text-dim); font-weight:700;">HACCP TEPLOTA</span>
-                    <div class="metric-val-box" id="disp-temp">76.5 °C</div>
-                    <div class="stepper">
-                        <button class="btn-step" onclick="modTemp(-1.0)">-1°</button>
-                        <button class="btn-step" onclick="modTemp(1.0)">+1°</button>
-                    </div>
-                </div>
+        <!-- KROK 2: VOLBA PORCÍ -->
+        <div id="step-2" class="step-view" style="display:none;">
+            <div class="step-title-box">
+                <div class="step-num">KROK 2 ZE 3</div>
+                <div class="step-title">KOLIK PORCÍ EXPEDUJETE?</div>
             </div>
-
-            <div class="actions-cluster">
-                <button class="btn-act btn-dispatch" onclick="commitIntent('DISPATCH_BATCH')">EXPEDOVAT (OTISK)</button>
-                <button class="btn-act btn-accept" onclick="commitIntent('ACCEPT_BATCH')">PŘIJMOUT</button>
-                <button class="btn-act btn-print" onclick="printActiveLabel()">ŠTÍTEK</button>
+            <div class="atm-portions-grid">
+                <div class="atm-btn-amount" onclick="selectPortions(10, this)">10<span class="amount-sub">porcí</span></div>
+                <div class="atm-btn-amount" onclick="selectPortions(25, this)">25<span class="amount-sub">porcí</span></div>
+                <div class="atm-btn-amount selected" onclick="selectPortions(45, this)">45<span class="amount-sub">porcí</span></div>
+                <div class="atm-btn-amount" onclick="selectPortions(70, this)">70<span class="amount-sub">porcí</span></div>
+                <div class="atm-btn-amount" onclick="selectPortions(100, this)">100<span class="amount-sub">porcí</span></div>
+                <div class="atm-btn-amount" onclick="selectPortions(150, this)">150<span class="amount-sub">porcí</span></div>
             </div>
         </div>
 
-        <!-- Audit & Feed -->
-        <div class="glass-panel">
-            <div class="section-header">
-                <span>Krystalický feed</span>
-                <div>
-                    <a href="/audit" target="_blank" style="color:var(--accent-cyan); text-decoration:none; font-weight:700; margin-right:8px;">Audit ↗</a>
-                    <a href="/api/export/pohoda.xml" target="_blank" style="color:var(--emerald); text-decoration:none; font-weight:700;">Pohoda</a>
-                </div>
+        <!-- KROK 3: HACCP TEPLOTA -->
+        <div id="step-3" class="step-view" style="display:none;">
+            <div class="step-title-box">
+                <div class="step-num">KROK 3 ZE 3</div>
+                <div class="step-title">POTVRĎTE TEPLOTU VÝDEJE</div>
             </div>
-            <div class="stream-container" id="stream-feed"></div>
+            
+            <div class="temp-display-box" id="temp-box">
+                <div class="temp-digital" id="disp-temp">76.5 °C</div>
+                <div class="temp-haccp-status" id="disp-haccp-ok">✓ HACCP NORMA SPLNĚNA (&ge;65 °C)</div>
+            </div>
+
+            <div class="temp-stepper-row">
+                <button class="btn-temp-step" onclick="modTemp(-1.0)">-1.0 °C</button>
+                <button class="btn-temp-step" onclick="modTemp(-0.5)">-0.5 °C</button>
+                <button class="btn-temp-step" onclick="modTemp(0.5)">+0.5 °C</button>
+                <button class="btn-temp-step" onclick="modTemp(1.0)">+1.0 °C</button>
+            </div>
+        </div>
+
+        <!-- SPODNÍ AKČNÍ TLAČÍTKA -->
+        <div class="atm-footer">
+            <button class="btn-atm-back" id="btn-back" onclick="prevStep()" style="display:none;">ZPĚT</button>
+            <button class="btn-atm-main" id="btn-next" onclick="nextStep()">POKRAČOVAT ➔</button>
         </div>
     </div>
 
-    <!-- MODAL: ŠTÍTEK NA KRABIČKU / TERMOBOX -->
-    <div id="modal-label" class="modal">
-        <div class="modal-sheet">
-            <h3 style="color:#fff; margin-bottom:0.8rem;">Expediční Štítek Pokrmu</h3>
-            <div class="label-preview" id="label-content"></div>
-            <button onclick="window.print()" style="background:var(--emerald); color:#000; border:none; border-radius:10px; padding:0.8rem; width:100%; font-weight:900; margin-top:1rem; cursor:pointer;">
-                TISKNOUT ŠTÍTEK (ESC/POS)
-            </button>
-            <button onclick="closeModal('modal-label')" style="background:transparent; border:1px solid var(--stroke-glass); color:#fff; border-radius:10px; padding:0.6rem; width:100%; font-weight:700; margin-top:0.4rem; cursor:pointer;">
-                ZAVŘÍT
-            </button>
+    <!-- DIALOG: PŘILOŽTE PRST (BANKOMATOVÁ AUTORIZACE) -->
+    <div id="dialog-fingerprint" class="overlay hidden">
+        <div class="atm-dialog">
+            <div class="dialog-icon">👆</div>
+            <div class="dialog-title">PŘILOŽTE PRST</div>
+            <div class="dialog-desc">
+                Zapečetění várky: <b id="fp-dish-name" style="color:#fff;">Svíčková</b><br>
+                Počet: <b id="fp-portions" style="color:var(--cyan);">45 ks</b> | Teplota: <b id="fp-temp" style="color:var(--green);">76.5 °C</b>
+            </div>
+            <button class="dialog-btn" style="background:#ff3366; color:#fff;" onclick="cancelFingerprint()">ZRUŠIT</button>
         </div>
     </div>
 
-    <!-- MODAL: EDITOR JÍDELNÍČKU S FOOD COSTY -->
-    <div id="modal-menu-editor" class="modal">
-        <div class="modal-sheet" style="text-align:left;">
-            <h3 style="color:#fff; margin-bottom:0.8rem;">Správa denního menu & Food Costů</h3>
-            <div id="menu-editor-fields" style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;"></div>
-            <button onclick="saveMenu()" style="background:var(--emerald); color:#000; border:none; border-radius:10px; padding:0.8rem; width:100%; font-weight:900; cursor:pointer;">
-                ULOŽIT ZMĚNY
-            </button>
-            <button onclick="closeModal('modal-menu-editor')" style="background:transparent; border:1px solid var(--stroke-glass); color:#fff; border-radius:10px; padding:0.6rem; width:100%; font-weight:700; margin-top:0.4rem; cursor:pointer;">
-                ZAVŘÍT
-            </button>
+    <!-- DIALOG: ÚSPĚCH A TISK ŠTÍTKU -->
+    <div id="dialog-success" class="overlay hidden">
+        <div class="atm-dialog">
+            <div class="dialog-icon" style="color:var(--green);">✓</div>
+            <div class="dialog-title" style="color:var(--green);">VÁRKA ZAPEČETĚNA</div>
+            <div class="dialog-desc">Kryptografický záznam byl zapsán do TEE enklávy.</div>
+            <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                <button class="dialog-btn" style="background:var(--green);" onclick="printLabelAndNext()">🖨 TISKNOUT ŠTÍTEK (ESC/POS)</button>
+                <button class="dialog-btn" style="background:transparent; border:1px solid rgba(255,255,255,0.2); color:#fff;" onclick="resetToStep1()">DALŠÍ VÁRKA</button>
+            </div>
         </div>
     </div>
 
-    <!-- MODALS: CHYBA / ÚSPĚCH -->
-    <div id="modal-error" class="modal">
-        <div class="modal-sheet">
-            <h3 style="color:var(--rose);">HACCP STOP-STAV</h3>
-            <p style="color:var(--text-muted); margin-top:0.5rem; font-size:0.85rem;" id="modal-err-msg">Teplota neodpovídá normě!</p>
-            <button onclick="closeModal('modal-error')" style="background:var(--rose); color:#fff; border:none; border-radius:10px; padding:0.8rem; width:100%; font-weight:900; margin-top:1rem; cursor:pointer;">
-                ROZUMÍM
-            </button>
-        </div>
-    </div>
-
-    <div id="modal-success" class="modal">
-        <div class="modal-sheet">
-            <h3 style="color:var(--emerald);">ZAPEČETĚNO V TEE</h3>
-            <p style="color:var(--text-muted); margin-top:0.5rem; font-size:0.85rem;" id="modal-succ-msg">Várka byla podepsána a uložena.</p>
-            <button onclick="closeModal('modal-success')" style="background:var(--emerald); color:#000; border:none; border-radius:10px; padding:0.8rem; width:100%; font-weight:900; margin-top:1rem; cursor:pointer;">
-                HOTOVO
-            </button>
+    <!-- DIALOG: GATEKEEPER ONBOARDING -->
+    <div id="gatekeeper" class="overlay">
+        <div class="atm-dialog">
+            <div class="dialog-icon">👨‍🍳</div>
+            <div class="dialog-title">PŘIHLÁŠENÍ SMĚNY</div>
+            <div class="dialog-desc">Zadejte jméno kuchaře a přiložte prst k senzoru pro ukování TEE klíče.</div>
+            <input type="text" id="chef-name-input" value="Šéfkuchař Zbyněk" style="width:100%; background:#000; border:2px solid var(--btn-border); color:#fff; padding:0.9rem; font-size:1.1rem; border-radius:10px; margin-bottom:1rem; text-align:center; font-weight:800;">
+            <button class="dialog-btn" onclick="enrollChef()">✦ PŘIHLÁSIT SMĚNU</button>
         </div>
     </div>
 
     <script>
-        let currentMenu = [];
-        let selectedItem = null;
-        let selectedClient = "Jídelna - přímý výdej";
-        let chefName = "Šéfkuchař Zbyněk";
-        let portions = 45;
-        let temperature = 76.5;
-        let currentIntent = null;
+        let currentStep = 1;
+        let menuItems = [];
+        let selectedDish = null;
+        let selectedPortionsCount = 45;
+        let selectedTemperature = 76.5;
         let currentChallenge = null;
+        let currentIntent = null;
+
+        const haptic = (p = [35]) => { if (navigator.vibrate) navigator.vibrate(p); };
 
         function loadMenu() {
             fetch('/api/menu').then(r => r.json()).then(items => {
-                currentMenu = items;
-                renderDishes();
+                menuItems = items;
+                renderMenuTiles();
             });
         }
 
-        function renderDishes() {
-            const container = document.getElementById('dishes-container');
-            container.innerHTML = '';
-            currentMenu.forEach((item, idx) => {
-                const isSelected = (!selectedItem && idx === 0) || (selectedItem && selectedItem.id === item.id);
-                if (isSelected) selectedItem = item;
+        function renderMenuTiles() {
+            const grid = document.getElementById('menu-grid');
+            grid.innerHTML = '';
+            menuItems.forEach((item, idx) => {
+                const isSelected = (!selectedDish && idx === 0) || (selectedDish && selectedDish.id === item.id);
+                if (isSelected) selectedDish = item;
 
-                container.innerHTML += `
-                    <div class="dish-card ${isSelected ? 'active' : ''}" onclick="selectDish('${item.id}')">
-                        <div class="dish-top-row">
-                            <span>${item.id}</span>
-                            <span>${item.price} Kč</span>
-                        </div>
-                        <div class="dish-name">${item.name}</div>
-                        <div class="dish-sub">
-                            <span>FC: ${item.food_cost || 0} Kč</span>
-                            <span>Alergeny: ${item.allergens || '-'}</span>
-                        </div>
+                grid.innerHTML += `
+                    <div class="atm-tile ${isSelected ? 'selected' : ''}" onclick="pickDish('${item.id}', this)">
+                        <div class="tile-id">${item.id}</div>
+                        <div class="tile-name">${item.name}</div>
+                        <div class="tile-price">${item.price} Kč | FC: ${item.food_cost || 0} Kč</div>
                     </div>
                 `;
             });
         }
 
-        function selectDish(id) {
-            selectedItem = currentMenu.find(i => i.id === id);
-            renderDishes();
+        function pickDish(id, el) {
+            haptic(25);
+            selectedDish = menuItems.find(i => i.id === id);
+            document.querySelectorAll('.atm-tile').forEach(t => t.classList.remove('selected'));
+            el.classList.add('selected');
         }
 
-        function selectClient(el, name) {
-            document.querySelectorAll('.client-chip').forEach(c => c.classList.remove('active'));
-            el.classList.add('active');
-            selectedClient = name;
+        function selectPortions(val, el) {
+            haptic(25);
+            selectedPortionsCount = val;
+            document.querySelectorAll('.atm-btn-amount').forEach(b => b.classList.remove('selected'));
+            el.classList.add('selected');
         }
 
-        function modPortions(d) {
-            portions = Math.max(1, Math.min(250, portions + d));
-            document.getElementById('disp-portions').innerText = portions;
+        function modTemp(delta) {
+            haptic(25);
+            selectedTemperature = Math.round((selectedTemperature + delta) * 10) / 10;
+            document.getElementById('disp-temp').innerText = selectedTemperature.toFixed(1) + " °C";
+
+            const ok = selectedTemperature >= 65.0;
+            const box = document.getElementById('temp-box');
+            const status = document.getElementById('disp-haccp-ok');
+
+            if (ok) {
+                box.style.borderColor = "var(--green)";
+                box.style.boxShadow = "0 0 25px var(--green-glow)";
+                status.style.color = "var(--green)";
+                status.innerText = "✓ HACCP NORMA SPLNĚNA (≥65 °C)";
+            } else {
+                box.style.borderColor = "var(--red)";
+                box.style.boxShadow = "0 0 25px rgba(255, 51, 102, 0.4)";
+                status.style.color = "var(--red)";
+                status.innerText = "⚠ TEPLOTA POD NORMOU (STOP-STAV)";
+            }
         }
 
-        function modTemp(d) {
-            temperature = Math.round((temperature + d) * 10) / 10;
-            document.getElementById('disp-temp').innerText = temperature.toFixed(1) + " °C";
+        function updateStepView() {
+            document.getElementById('step-1').style.display = currentStep === 1 ? 'block' : 'none';
+            document.getElementById('step-2').style.display = currentStep === 2 ? 'block' : 'none';
+            document.getElementById('step-3').style.display = currentStep === 3 ? 'block' : 'none';
+
+            document.getElementById('btn-back').style.display = currentStep > 1 ? 'block' : 'none';
+
+            const nextBtn = document.getElementById('btn-next');
+            if (currentStep === 3) {
+                nextBtn.innerText = "EXPEDOVAT (OTISK) ➔";
+                nextBtn.style.background = "linear-gradient(135deg, #00ff88, #00aa55)";
+            } else {
+                nextBtn.innerText = "POKRAČOVAT ➔";
+                nextBtn.style.background = "linear-gradient(135deg, #00d2ff, #0077ff)";
+            }
         }
 
-        function openMenuEditor() {
-            const container = document.getElementById('menu-editor-fields');
-            container.innerHTML = '';
-            currentMenu.forEach((item, idx) => {
-                container.innerHTML += `
-                    <div style="background:rgba(0,0,0,0.3); padding:0.5rem; border-radius:8px; font-size:0.75rem;">
-                        <input type="text" id="edit-name-${idx}" value="${item.name}" style="width:100%; background:transparent; border:1px solid var(--stroke-glass); color:#fff; padding:0.3rem; margin-bottom:0.3rem; border-radius:4px;">
-                        <div style="display:flex; gap:0.3rem;">
-                            <input type="number" id="edit-price-${idx}" value="${item.price}" placeholder="Cena Kč" style="width:65px; background:transparent; border:1px solid var(--stroke-glass); color:#fff; padding:0.3rem; border-radius:4px;">
-                            <input type="number" id="edit-fc-${idx}" value="${item.food_cost || 0}" placeholder="FoodCost" style="width:65px; background:transparent; border:1px solid var(--stroke-glass); color:var(--rose); padding:0.3rem; border-radius:4px;">
-                            <input type="text" id="edit-allergens-${idx}" value="${item.allergens}" placeholder="Alergeny (1,3,7)" style="flex:1; background:transparent; border:1px solid var(--stroke-glass); color:#fff; padding:0.3rem; border-radius:4px;">
-                        </div>
-                    </div>
-                `;
-            });
-            document.getElementById('modal-menu-editor').classList.add('active');
+        function nextStep() {
+            haptic(35);
+            if (currentStep === 1) {
+                currentStep = 2;
+                updateStepView();
+            } else if (currentStep === 2) {
+                currentStep = 3;
+                updateStepView();
+            } else if (currentStep === 3) {
+                triggerBiometrics();
+            }
         }
 
-        function saveMenu() {
-            currentMenu.forEach((item, idx) => {
-                item.name = document.getElementById(`edit-name-${idx}`).value;
-                item.price = parseFloat(document.getElementById(`edit-price-${idx}`).value) || item.price;
-                item.food_cost = parseFloat(document.getElementById(`edit-fc-${idx}`).value) || 0;
-                item.allergens = document.getElementById(`edit-allergens-${idx}`).value;
-            });
+        function prevStep() {
+            haptic(25);
+            if (currentStep > 1) {
+                currentStep--;
+                updateStepView();
+            }
+        }
 
-            fetch('/api/menu', {
+        async function triggerBiometrics() {
+            if (selectedTemperature < 65.0) {
+                alert("HACCP STOP: Nelze expedovat jídlo s teplotou pod 65.0 °C!");
+                return;
+            }
+
+            currentIntent = {
+                action: "DISPATCH_BATCH",
+                item: selectedDish.id,
+                item_name: selectedDish.name,
+                unit_price: selectedDish.price,
+                food_cost: selectedDish.food_cost || 0,
+                portions: selectedPortionsCount,
+                temperature: selectedTemperature,
+                client_name: "Jídelna výdej",
+                requested_at: Date.now() / 1000
+            };
+
+            const cRes = await fetch('/api/auth/challenge');
+            const { challenge } = await cRes.json();
+            currentChallenge = challenge;
+
+            document.getElementById('fp-dish-name').innerText = selectedDish.name;
+            document.getElementById('fp-portions').innerText = selectedPortionsCount + " ks";
+            document.getElementById('fp-temp').innerText = selectedTemperature.toFixed(1) + " °C";
+            document.getElementById('dialog-fingerprint').classList.remove('hidden');
+
+            const payloadToSign = JSON.stringify(currentIntent) + ":" + currentChallenge;
+            if (window.AndroidBridge && typeof window.AndroidBridge.authenticateAndSign === 'function') {
+                window.AndroidBridge.authenticateAndSign(payloadToSign);
+            }
+        }
+
+        function cancelFingerprint() {
+            document.getElementById('dialog-fingerprint').classList.add('hidden');
+        }
+
+        window.onBiometricSuccess = async function(signatureBase64, publicKeyBase64) {
+            document.getElementById('dialog-fingerprint').classList.add('hidden');
+
+            const res = await fetch('/api/crystallize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ items: currentMenu })
-            }).then(() => {
-                closeModal('modal-menu-editor');
-                renderDishes();
+                body: JSON.stringify({
+                    intent: currentIntent,
+                    fido_id: publicKeyBase64,
+                    challenge: currentChallenge,
+                    signature: signatureBase64
+                })
             });
+
+            const r = await res.json();
+            if (r.ui_feedback === "SUCCESS") {
+                haptic([50, 50, 50]);
+                document.getElementById('dialog-success').classList.remove('hidden');
+            } else {
+                alert("Chyba zápisu krystalu: " + r.message);
+            }
+        };
+
+        window.onBiometricError = function(msg) {
+            document.getElementById('dialog-fingerprint').classList.add('hidden');
+            alert("Biometrie: " + msg);
+        };
+
+        function printLabelAndNext() {
+            window.print();
+            resetToStep1();
         }
 
-        function printActiveLabel() {
-            if (!selectedItem) return;
-            const dateStr = new Date().toLocaleString('cs-CZ');
-            const labelHtml = `
-                <div style="text-align:center; font-weight:bold; border-bottom:1px dashed #000; padding-bottom:4px; margin-bottom:6px;">
-                    INLOOP TRUST KDS<br>GARANCE ČERSTVOSTI
-                </div>
-                <b>POKRM:</b> ${selectedItem.name}<br>
-                <b>ODBERATEL:</b> ${selectedClient}<br>
-                <b>POCET:</b> ${portions} ks | <b>TEPLOTA:</b> ${temperature} °C (CCP1 OK)<br>
-                <b>CAS VYDEJE:</b> ${dateStr}<br>
-                <b>ALERGENY:</b> ${selectedItem.allergens || 'Zadne'}<br>
-                <b>ODPOVEDNY KUCHAR:</b> ${chefName}<br>
-                <div style="text-align:center; margin-top:8px; border-top:1px dashed #000; padding-top:4px; font-size:9px;">
-                    KRYPTOGRAFICKY ZAPECETENO V TEE<br>
-                    ID: ${selectedItem.id}-${Date.now().toString().slice(-6)}
-                </div>
-            `;
-            document.getElementById('label-content').innerHTML = labelHtml;
-            document.getElementById('modal-label').classList.add('active');
-        }
-
-        function showModal(id, msg) {
-            if (msg) document.querySelector(`#${id} p`).innerText = msg;
-            document.getElementById(id).classList.add('active');
-        }
-
-        function closeModal(id) {
-            document.getElementById(id).classList.remove('active');
+        function resetToStep1() {
+            document.getElementById('dialog-success').classList.add('hidden');
+            currentStep = 1;
+            updateStepView();
         }
 
         function enrollChef() {
-            chefName = document.getElementById('chef-name-input').value || "Šéfkuchař";
+            const name = document.getElementById('chef-name-input').value || "Šéfkuchař";
+            document.getElementById('chef-badge').innerText = name.toUpperCase();
             if (window.AndroidBridge && typeof window.AndroidBridge.enrollChefKey === 'function') {
                 window.AndroidBridge.enrollChefKey();
-            } else {
-                showModal('modal-error', 'Android biometrický senzor není dostupný.');
             }
         }
 
         window.onEnrollmentSuccess = function(publicKey) {
-            document.getElementById('gatekeeper').classList.add('unlocked');
-            showModal('modal-success', 'Klíč šéfkuchaře ukován v TEE enklávě.');
+            document.getElementById('gatekeeper').classList.add('hidden');
         };
-
-        async function commitIntent(action) {
-            if (!selectedItem) return;
-
-            currentIntent = {
-                action: action,
-                item: selectedItem.id,
-                item_name: selectedItem.name,
-                unit_price: selectedItem.price,
-                food_cost: selectedItem.food_cost || 0,
-                allergens: selectedItem.allergens,
-                client_name: selectedClient,
-                chef_name: chefName,
-                portions: portions,
-                temperature: temperature,
-                requested_at: Date.now() / 1000
-            };
-
-            try {
-                const pf = await fetch('/api/macaroon/preflight', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ intent: currentIntent })
-                });
-                const pfData = await pf.json();
-                if (pfData.status !== "SUCCESS") {
-                    showModal('modal-error', pfData.message);
-                    return;
-                }
-
-                const cRes = await fetch('/api/auth/challenge');
-                const { challenge } = await cRes.json();
-                currentChallenge = challenge;
-
-                const payloadToSign = JSON.stringify(currentIntent) + ":" + currentChallenge;
-
-                if (window.AndroidBridge && typeof window.AndroidBridge.authenticateAndSign === 'function') {
-                    window.AndroidBridge.authenticateAndSign(payloadToSign);
-                } else {
-                    showModal('modal-error', 'Android biometrický senzor není dostupný.');
-                }
-            } catch (err) {
-                showModal('modal-error', 'Chyba spojení: ' + err.message);
-            }
-        }
-
-        window.onBiometricSuccess = async function(signatureBase64, publicKeyBase64) {
-            try {
-                const res = await fetch('/api/crystallize', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        intent: currentIntent,
-                        fido_id: publicKeyBase64,
-                        challenge: currentChallenge,
-                        signature: signatureBase64
-                    })
-                });
-
-                const r = await res.json();
-                if (r.ui_feedback === "SUCCESS") {
-                    showModal('modal-success', `Zapečetěno: ${currentIntent.item_name} (${currentIntent.portions} ks pro ${currentIntent.client_name}).`);
-                    loadRecords();
-                } else {
-                    showModal('modal-error', "Chyba: " + r.message);
-                }
-            } catch (err) {
-                showModal('modal-error', "Chyba zápisu: " + err.message);
-            }
-        };
-
-        window.onBiometricError = function(errorMsg) {
-            showModal('modal-error', errorMsg);
-        };
-
-        function loadRecords() {
-            fetch('/api/records').then(r => r.json()).then(data => {
-                const feed = document.getElementById('stream-feed');
-                feed.innerHTML = '';
-
-                let totalRev = 0;
-                let totalFc = 0;
-
-                data.records.reverse().forEach(r => {
-                    const it = r.intent;
-                    const isDisp = it.action === 'DISPATCH_BATCH';
-                    const date = new Date(r.bitemporal.transaction_time * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-
-                    if (isDisp) {
-                        const count = it.portions || 0;
-                        totalRev += count * (it.unit_price || 0);
-                        totalFc += count * (it.food_cost || 0);
-                    }
-
-                    feed.innerHTML += `
-                        <div class="stream-card">
-                            <div>
-                                <div class="stream-title">${it.item_name} (${it.portions} ks)</div>
-                                <div class="stream-meta"><b>${it.client_name}</b> • ${it.temperature} °C • ${date}</div>
-                            </div>
-                            <div class="badge-disp" style="background:${isDisp ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)'}; color:${isDisp ? 'var(--emerald)' : 'var(--amber)'}; padding:0.25rem 0.5rem; border-radius:6px; font-size:0.65rem; font-weight:800;">
-                                ${isDisp ? 'EXPEDOVÁNO' : 'PŘIJATO'}
-                            </div>
-                        </div>
-                    `;
-                });
-
-                document.getElementById('profit-rev').innerText = totalRev.toLocaleString('cs-CZ') + " Kč";
-                document.getElementById('profit-fc').innerText = totalFc.toLocaleString('cs-CZ') + " Kč";
-                const netProfit = totalRev - totalFc;
-                document.getElementById('profit-net').innerText = netProfit.toLocaleString('cs-CZ') + " Kč";
-            }).catch(e => console.error(e));
-
-            // Načtení B2B objednávek
-            fetch('/api/portal/summary').then(r => r.json()).then(d => {
-                const count = d.orders ? d.orders.length : 0;
-                document.getElementById('b2b-orders-count').innerText = "B2B Objednávek: " + count;
-            }).catch(e => {});
-        }
 
         function checkEnclave() {
             if (window.AndroidBridge && typeof window.AndroidBridge.getEnrolledKeyStatus === 'function') {
                 try {
                     const status = JSON.parse(window.AndroidBridge.getEnrolledKeyStatus());
                     if (status.enrolled) {
-                        document.getElementById('gatekeeper').classList.add('unlocked');
+                        document.getElementById('gatekeeper').classList.add('hidden');
                     }
                 } catch(e){}
             }
         }
 
         loadMenu();
-        loadRecords();
-        setTimeout(checkEnclave, 500);
-        setInterval(loadRecords, 3000);
+        setTimeout(checkEnclave, 400);
     </script>
 </body>
 </html>
