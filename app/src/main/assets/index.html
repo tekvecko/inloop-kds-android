@@ -44,6 +44,7 @@
         }
         .brand { font-size: 1.05rem; font-weight: 800; color: #fff; letter-spacing: -0.01em; }
         .brand span { color: var(--accent-cyan); }
+        .nav-right { display: flex; align-items: center; gap: 0.5rem; }
         .capsule {
             background: rgba(16, 185, 129, 0.12);
             border: 1px solid var(--emerald);
@@ -54,6 +55,18 @@
             font-weight: 700;
             text-transform: uppercase;
         }
+
+        .btn-shift {
+            background: transparent;
+            border: 1px solid var(--stroke-glass);
+            color: var(--text-muted);
+            padding: 0.25rem 0.5rem;
+            border-radius: 8px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn-shift:hover { color: #fff; border-color: var(--accent-cyan); }
 
         .workspace {
             display: grid;
@@ -187,20 +200,6 @@
             color: #fff;
         }
 
-        .btn-enroll {
-            background: transparent;
-            border: 1px dashed var(--stroke-glass);
-            color: var(--text-dim);
-            padding: 0.4rem;
-            border-radius: 8px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            cursor: pointer;
-            margin-top: 0.5rem;
-            text-align: center;
-        }
-        .btn-enroll:hover { border-color: var(--accent-cyan); color: #fff; }
-
         .stream-container {
             flex: 1;
             overflow-y: auto;
@@ -233,6 +232,51 @@
             font-size: 0.68rem;
             font-weight: 800;
         }
+
+        /* Modals & Gatekeeper */
+        .gatekeeper-screen {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at center, #0f172a 0%, #030712 100%);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            text-align: center;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .gatekeeper-screen.unlocked {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .gate-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            animation: pulseGlow 2s infinite ease-in-out;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(56,189,248,0.4)); }
+            50% { transform: scale(1.05); filter: drop-shadow(0 0 25px rgba(56,189,248,0.8)); }
+        }
+        .gate-title { font-size: 1.6rem; font-weight: 900; color: #fff; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+        .gate-desc { font-size: 0.95rem; color: var(--text-muted); max-width: 420px; line-height: 1.45; margin-bottom: 2rem; }
+        .btn-gate {
+            background: linear-gradient(135deg, #38bdf8, #2563eb);
+            color: #000;
+            border: none;
+            border-radius: 14px;
+            padding: 1.2rem 2.5rem;
+            font-size: 1.05rem;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(56, 189, 248, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .btn-gate:active { transform: scale(0.96); }
 
         .modal {
             position: fixed;
@@ -272,9 +316,23 @@
 </head>
 <body>
 
+    <!-- GATEKEEPER ONBOARDING BRÁNA -->
+    <div id="gatekeeper" class="gatekeeper-screen">
+        <div class="gate-icon">🔐</div>
+        <div class="gate-title">INLOOP TRUST KDS</div>
+        <div class="gate-desc">
+            Terminál vyžaduje počáteční spárování s odpovědnou osobou směny. Přiložením prstu ukujete v procesoru zařízení hardwarový pečetní klíč.
+        </div>
+        <button class="btn-gate" onclick="enrollChef()">✦ SPÁROVAT OTISK ŠÉFKUCHAŘE</button>
+    </div>
+
+    <!-- HLAVNÍ KDS ROZHRANÍ -->
     <div class="nav-bar">
         <div class="brand"><span>INLOOP</span> TRUST KDS</div>
-        <div class="capsule" id="enclave-status">TEE: INICIALIZACE</div>
+        <div class="nav-right">
+            <div class="capsule" id="enclave-status">ŠÉFKUCHAŘ AKTIVNÍ</div>
+            <button class="btn-shift" onclick="enrollChef()">Předat směnu</button>
+        </div>
     </div>
 
     <div class="workspace">
@@ -321,8 +379,6 @@
                 <button class="btn-act btn-dispatch" onclick="commitIntent('DISPATCH_BATCH')">EXPEDOVAT (OTISK)</button>
                 <button class="btn-act btn-accept" onclick="commitIntent('ACCEPT_BATCH')">PŘIJMOUT</button>
             </div>
-
-            <button class="btn-enroll" onclick="enrollChef()">✦ Registrovat / Spárovat otisk šéfkuchaře</button>
         </div>
 
         <div class="glass-panel">
@@ -334,6 +390,7 @@
         </div>
     </div>
 
+    <!-- Modals -->
     <div id="modal-error" class="modal">
         <div class="modal-sheet">
             <h3 style="color:var(--rose);">HACCP Stop-Stav</h3>
@@ -363,11 +420,14 @@
             if (window.AndroidBridge && typeof window.AndroidBridge.getEnrolledKeyStatus === 'function') {
                 try {
                     const status = JSON.parse(window.AndroidBridge.getEnrolledKeyStatus());
+                    const gate = document.getElementById('gatekeeper');
                     if (status.enrolled) {
-                        document.getElementById('enclave-status').innerText = "ŠÉFKUCHAŘ SPÁROVÁN";
+                        gate.classList.add('unlocked');
+                        document.getElementById('enclave-status').innerText = "ŠÉFKUCHAŘ AKTIVNÍ";
                         document.getElementById('enclave-status').style.color = "var(--emerald)";
                     } else {
-                        document.getElementById('enclave-status').innerText = "OTISK NENÍ SPÁROVÁN";
+                        gate.classList.remove('unlocked');
+                        document.getElementById('enclave-status').innerText = "ČEKÁ NA SPÁROVÁNÍ";
                         document.getElementById('enclave-status').style.color = "var(--rose)";
                     }
                 } catch(e){}
@@ -384,7 +444,7 @@
 
         window.onEnrollmentSuccess = function(publicKey) {
             checkEnclaveStatus();
-            showModal('modal-success', 'Otisk šéfkuchaře byl úspěšně spárován a ukován v ARM TrustZone enklávě.');
+            showModal('modal-success', 'Šéfkuchař byl úspěšně zaregistrován. Terminál odemčen.');
         };
 
         function selectDish(el, code, name, price) {
@@ -501,7 +561,7 @@
             }).catch(e => console.error(e));
         }
 
-        setTimeout(checkEnclaveStatus, 800);
+        setTimeout(checkEnclaveStatus, 500);
         loadRecords();
         setInterval(loadRecords, 3000);
     </script>
