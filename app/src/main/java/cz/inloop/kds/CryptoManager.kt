@@ -1,5 +1,6 @@
 package cz.inloop.kds
 
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
@@ -9,7 +10,7 @@ import java.security.Signature
 import java.util.Base64
 
 object CryptoManager {
-    private const val KEY_ALIAS = "inloop_kds_tee_master_key"
+    private const val KEY_ALIAS = "inloop_kds_tee_master_key_v2"
     private const val KEYSTORE_NAME = "AndroidKeyStore"
 
     fun initHardwareKey(): Boolean {
@@ -30,30 +31,34 @@ object CryptoManager {
             KeyProperties.KEY_ALGORITHM_EC,
             KEYSTORE_NAME
         )
-        val parameterSpec = KeyGenParameterSpec.Builder(
+        val builder = KeyGenParameterSpec.Builder(
             KEY_ALIAS,
             KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
-        ).run {
+        ).apply {
             setDigests(KeyProperties.DIGEST_SHA256)
             setUserAuthenticationRequired(true)
-            build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                setUserAuthenticationParameters(
+                    0, // 0 = vyžaduje autentizaci pro každé jednotlivé použití klíče
+                    KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
+                )
+            }
         }
-        keyPairGenerator.initialize(parameterSpec)
+        keyPairGenerator.initialize(builder.build())
         keyPairGenerator.generateKeyPair()
     }
 
     fun getSignatureObject(): Signature? {
         return try {
             val keyStore = KeyStore.getInstance(KEYSTORE_NAME).apply { load(null) }
-            val privateKey = keyStore.getKey(KEY_ALIAS, null) ?: run {
+            if (!keyStore.containsAlias(KEY_ALIAS)) {
                 generateKey()
-                keyStore.getKey(KEY_ALIAS, null)
             }
+            val privateKey = keyStore.getKey(KEY_ALIAS, null) ?: return null
             Signature.getInstance("SHA256withECDSA").apply {
                 initSign(privateKey as java.security.PrivateKey)
             }
         } catch (e: KeyPermanentlyInvalidatedException) {
-            // Při změně otisků v Androidu klíč obnovíme
             generateKey()
             val keyStore = KeyStore.getInstance(KEYSTORE_NAME).apply { load(null) }
             val privateKey = keyStore.getKey(KEY_ALIAS, null)
@@ -75,10 +80,10 @@ object CryptoManager {
     fun getPublicKeyBase64(): String {
         return try {
             val keyStore = KeyStore.getInstance(KEYSTORE_NAME).apply { load(null) }
-            val certificate = keyStore.getCertificate(KEY_ALIAS) ?: return "KEY_NOT_READY"
+            val certificate = keyStore.getCertificate(KEY_ALIAS) ?: return "KEY_NOT_FOUND"
             Base64.getEncoder().encodeToString(certificate.publicKey.encoded)
         } catch (e: Exception) {
-            "HARDWARE_TEE_INITIALIZING"
+            "HARDWARE_KEY_INITIALIZING"
         }
     }
 }

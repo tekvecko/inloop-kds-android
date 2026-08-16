@@ -2,6 +2,8 @@ package cz.inloop.kds
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.WindowManager
 import android.webkit.*
@@ -19,15 +21,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var server: KdsEmbeddedServer? = null
     private val port = 5005
-
     private lateinit var executor: Executor
-    private var pendingPayload: String = ""
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. Inicializace hardwarového klíče v TEE
+        executor = ContextCompat.getMainExecutor(this)
+
+        // 1. Inicializace TEE klíče
         try {
             CryptoManager.initHardwareKey()
         } catch (e: Exception) {
@@ -42,13 +44,11 @@ class MainActivity : AppCompatActivity() {
             e.printStackTrace()
         }
 
-        executor = ContextCompat.getMainExecutor(this)
-
-        // 3. Kiosk mód
+        // 3. Kiosk / Fullscreen nastavení
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
 
-        // 4. Konfigurace WebView
+        // 4. WebView konfigurace
         webView = WebView(this)
         setContentView(webView)
 
@@ -60,7 +60,7 @@ class MainActivity : AppCompatActivity() {
         settings.allowContentAccess = true
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
-        // Registrace JavaScript rozhraní
+        // Registrace JavaScript Interface
         webView.addJavascriptInterface(WebAppInterface(), "AndroidBridge")
 
         webView.webViewClient = object : WebViewClient() {
@@ -70,81 +70,68 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webChromeClient = object : WebChromeClient() {
-            override fun onPermissionRequest(request: PermissionRequest?) {
-                request?.grant(request.resources)
-            }
-            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                return super.onConsoleMessage(consoleMessage)
+            override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                result?.confirm()
+                return true
             }
         }
 
         webView.loadUrl("http://127.0.0.1:$port")
     }
 
-    private fun showBiometricDialog(signature: Signature, payload: String) {
-        val biometricManager = BiometricManager.from(this)
-        val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-
-        if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
-            val errorReason = when (canAuth) {
-                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "Zařízení nemá biometrický hardware."
-                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> "Biometrický senzor je momentálně nedostupný."
-                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "V zařízení není zaregistrován žádný otisk prstu! Přidejte otisk v nastavení Androidu."
-                else -> "Biometrie není k dispozici (kód $canAuth)."
-            }
-            notifyBiometricError(errorReason)
-            return
-        }
-
+    private fun showBiometricPrompt(signature: Signature, payload: String) {
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Autorizace várky šéfkuchařem")
-            .setSubtitle("Přiložte prst k hardwarovému senzoru pro pečeť do TEE")
+            .setTitle("Autorizace výdeje (InLoop TEE)")
+            .setSubtitle("Přiložte prst k hardwarovému senzoru pro pečeť várky")
             .setNegativeButtonText("Zrušit")
-            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .build()
 
         val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 super.onAuthenticationSucceeded(result)
-                val authedSignature = result.cryptoObject?.signature
-                if (authedSignature != null) {
+                val authedSig = result.cryptoObject?.signature
+                if (authedSig != null) {
                     try {
-                        val signatureBase64 = CryptoManager.signData(authedSignature, payload.toByteArray(Charsets.UTF_8))
+                        val signatureBase64 = CryptoManager.signData(authedSig, payload.toByteArray(Charsets.UTF_8))
                         val publicKey = CryptoManager.getPublicKeyBase64()
 
                         val safeSig = JSONObject.quote(signatureBase64)
                         val safeKey = JSONObject.quote(publicKey)
-                        webView.post {
+
+                        Handler(Looper.getMainLooper()).post {
                             webView.evaluateJavascript("window.onBiometricSuccess($safeSig, $safeKey);", null)
                         }
                     } catch (e: Exception) {
-                        notifyBiometricError("Chyba podpisu v TEE: ${e.message}")
+                        handleError("Chyba při podepisování v TEE: ${e.message}")
                     }
                 } else {
-                    notifyBiometricError("Chyba: Podpisový objekt nebyl odemčen.")
+                    handleError("Podpisový objekt nebyl odemčen.")
                 }
             }
 
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 super.onAuthenticationError(errorCode, errString)
-                notifyBiometricError(errString.toString())
+                handleError("Biometrie zrušena/chyba ($errorCode): $errString")
             }
 
             override fun onAuthenticationFailed() {
                 super.onAuthenticationFailed()
+                Toast.makeText(this@MainActivity, "Otisk nerozpoznán, zkuste to znovu", Toast.LENGTH_SHORT).show()
             }
         })
 
         try {
             biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
         } catch (e: Exception) {
-            notifyBiometricError("Chyba spuštění biometrie: ${e.message}")
+            handleError("Spuštění senzoru selhalo: ${e.message}")
         }
     }
 
-    private fun notifyBiometricError(msg: String) {
-        val safeMsg = JSONObject.quote(msg)
-        webView.post {
+    private fun handleError(msg: String) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+            val safeMsg = JSONObject.quote(msg)
             webView.evaluateJavascript("window.onBiometricError($safeMsg);", null)
         }
     }
@@ -152,14 +139,20 @@ class MainActivity : AppCompatActivity() {
     inner class WebAppInterface {
         @JavascriptInterface
         fun authenticateAndSign(payloadJson: String) {
-            runOnUiThread {
-                pendingPayload = payloadJson
-                val sigObject = CryptoManager.getSignatureObject()
+            Handler(Looper.getMainLooper()).post {
+                val biometricManager = BiometricManager.from(this@MainActivity)
+                val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)
 
+                if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
+                    handleError("V zařízení není nastaven otisk prstu nebo je senzor nedostupný (kód $canAuth). Nastavte otisk prstu v nastavení Androidu.")
+                    return@post
+                }
+
+                val sigObject = CryptoManager.getSignatureObject()
                 if (sigObject != null) {
-                    showBiometricDialog(sigObject, pendingPayload)
+                    showBiometricPrompt(sigObject, payloadJson)
                 } else {
-                    notifyBiometricError("Hardwarový TEE klíč nebyl připraven. Ujistěte se, že máte v Androidu nastaven otisk prstu.")
+                    handleError("Nelze inicializovat TEE klíč. Zkontrolujte zámek obrazovky.")
                 }
             }
         }
