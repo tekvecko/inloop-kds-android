@@ -30,6 +30,12 @@ class MainActivity : AppCompatActivity() {
         executor = ContextCompat.getMainExecutor(this)
 
         try {
+            CryptoManager.initHardwareKey()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        try {
             server = KdsEmbeddedServer(port, applicationContext)
             server?.start()
         } catch (e: Exception) {
@@ -50,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         settings.allowContentAccess = true
         settings.useWideViewPort = true
         settings.loadWithOverviewMode = true
+        settings.mediaPlaybackRequiresUserGesture = false
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         webView.addJavascriptInterface(WebAppInterface(), "AndroidBridge")
@@ -60,12 +67,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                // Automatické udělení oprávnění pro mikrofon a Bluetooth v Kiosku
+                request?.grant(request.resources)
+            }
+        }
+
         webView.loadUrl("http://127.0.0.1:$port")
     }
 
     private fun showBiometricPrompt(signature: Signature, payload: String, isEnrollment: Boolean = false) {
         val title = if (isEnrollment) "Registrace otisku šéfkuchaře" else "Autorizace výdeje (InLoop TEE)"
-        val subtitle = if (isEnrollment) "Přiložte prst pro ukování nového TEE master klíče" else "Přiložte prst k senzoru pro zapečetění várky"
+        val subtitle = if (isEnrollment) "Přiložte prst pro ukování TEE klíče" else "Přiložte prst pro zapečetění várky"
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
@@ -134,12 +148,10 @@ class MainActivity : AppCompatActivity() {
                     CryptoManager.registerNewChefKey()
                     val sigObject = CryptoManager.getSignatureObject()
                     if (sigObject != null) {
-                        showBiometricPrompt(sigObject, "CHEF_INITIAL_ENROLLMENT_${System.currentTimeMillis()}", true)
-                    } else {
-                        handleError("Nelze inicializovat TEE klíč. Zkontrolujte nastavení otisku v Androidu.")
+                        showBiometricPrompt(sigObject, "CHEF_ENROLLMENT_${System.currentTimeMillis()}", true)
                     }
                 } catch (e: Exception) {
-                    handleError("Chyba registrace: ${e.message}")
+                    handleError("Chyba: ${e.message}")
                 }
             }
         }
@@ -154,19 +166,11 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun authenticateAndSign(payloadJson: String) {
             Handler(Looper.getMainLooper()).post {
-                val biometricManager = BiometricManager.from(this@MainActivity)
-                val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)
-
-                if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
-                    handleError("V zařízení není nastaven otisk prstu! Nastavte jej v Nastavení Androidu.")
-                    return@post
-                }
-
                 val sigObject = CryptoManager.getSignatureObject()
                 if (sigObject != null) {
                     showBiometricPrompt(sigObject, payloadJson, false)
                 } else {
-                    handleError("Hardware TEE klíč není inicializován. Klikněte na 'Registrovat kuchaře'.")
+                    handleError("Klíč TEE není inicializován.")
                 }
             }
         }
