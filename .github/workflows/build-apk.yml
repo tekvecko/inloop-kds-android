@@ -1,0 +1,38 @@
+name: Build InLoop KDS Kiosk APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repozitáře
+        uses: actions/checkout@v4
+
+      - name: Nastavení JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Nastavení Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generování Gradle Wrapperu
+        run: |
+          gradle wrapper
+
+      - name: Sestavení APK (Debug / Release)
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug
+
+      - name: Uložení APK jako Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inloop-trust-kds-apk
+          path: app/build/outputs/apk/**/*.apk

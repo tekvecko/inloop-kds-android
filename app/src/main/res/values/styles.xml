@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.InLoopKDS" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowBackground">#030712</item>
+    </style>
+</resources>
