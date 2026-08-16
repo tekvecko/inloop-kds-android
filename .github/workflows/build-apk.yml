@@ -19,20 +19,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Nastavení Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Nastavení Gradle
+        uses: gradle/actions/setup-gradle@v3
 
-      - name: Generování Gradle Wrapperu
+      - name: Generování Wrapperu a Sestavení APK
         run: |
-          gradle wrapper
-
-      - name: Sestavení APK (Debug / Release)
-        run: |
+          gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
       - name: Uložení APK jako Artifact
         uses: actions/upload-artifact@v4
         with:
           name: inloop-trust-kds-apk
-          path: app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/debug/*.apk

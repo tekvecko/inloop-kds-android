@@ -9,9 +9,7 @@ buildscript {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
 }
