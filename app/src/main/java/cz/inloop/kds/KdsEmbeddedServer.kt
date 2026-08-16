@@ -1,5 +1,6 @@
 package cz.inloop.kds
 
+import android.content.Context
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONArray
 import org.json.JSONObject
@@ -10,9 +11,9 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
 
-class KdsEmbeddedServer(port: Int, private val filesDir: File) : NanoHTTPD("127.0.0.1", port) {
+class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("127.0.0.1", port) {
 
-    private val storageFile = File(filesDir, "kds_standalone_ledger.json")
+    private val storageFile = File(context.filesDir, "kds_standalone_ledger.json")
     private var lastHash = "0000000000000000000000000000000000000000000000000000000000000000"
     private var lamportClock = 0
     private val records = CopyOnWriteArrayList<JSONObject>()
@@ -71,7 +72,12 @@ class KdsEmbeddedServer(port: Int, private val filesDir: File) : NanoHTTPD("127.
 
         val response = when {
             uri == "/" -> {
-                newFixedLengthResponse(Response.Status.OK, "text/html", EmbeddedHtml.UI_HTML)
+                try {
+                    val html = context.assets.open("index.html").bufferedReader().use { it.readText() }
+                    newFixedLengthResponse(Response.Status.OK, "text/html", html)
+                } catch (e: Exception) {
+                    newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Chyba načtení šablony: ${e.message}")
+                }
             }
             uri == "/api/auth/challenge" && method == Method.GET -> {
                 val bytes = ByteArray(32)
@@ -129,12 +135,6 @@ class KdsEmbeddedServer(port: Int, private val filesDir: File) : NanoHTTPD("127.
             uri == "/audit" -> {
                 newFixedLengthResponse(Response.Status.OK, "text/html", renderAuditHtml())
             }
-            uri == "/api/export/pohoda.xml" -> {
-                newFixedLengthResponse(Response.Status.OK, "application/xml", renderPohodaXml())
-            }
-            uri == "/api/export/isdoc.xml" -> {
-                newFixedLengthResponse(Response.Status.OK, "application/xml", renderIsdocXml())
-            }
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "404 Not Found")
         }
 
@@ -170,21 +170,11 @@ class KdsEmbeddedServer(port: Int, private val filesDir: File) : NanoHTTPD("127.
             <!DOCTYPE html><html><head><meta charset='UTF-8'><title>Úřední Audit HACCP</title>
             <style>body{font-family:Arial,sans-serif;padding:20px;background:#fff;color:#000}table{width:100%;border-collapse:collapse;margin-top:15px;}th,td{border:1px solid #333;padding:8px;text-align:left;font-size:12px;}th{background:#f1f5f9;}</style>
             </head><body>
-            <div style='border:2px solid green;color:green;padding:6px;float:right;font-weight:bold;'>INTEGRITA_100%_PLATNÁ (STANDALONE_APK)</div>
+            <div style='border:2px solid green;color:green;padding:6px;float:right;font-weight:bold;'>INTEGRITA_100%_PLATNÁ</div>
             <h2>ÚŘEDNÍ PROTOKOL O KRYPTOGRAFICKÉM HACCP AUDITU</h2>
             <p>Generováno přímo z TEE procesoru zařízení bez centrálního serveru.</p>
             <table><thead><tr><th>Tick</th><th>Čas zápisu</th><th>Operace</th><th>Porce</th><th>Teplota</th><th>HACCP</th><th>Hash</th></tr></thead><tbody>$rows</tbody></table>
             </body></html>
         """.trimIndent()
-    }
-
-    private fun renderPohodaXml(): String {
-        val total = records.filter { it.getJSONObject("intent").optString("action") == "DISPATCH_BATCH" }
-            .sumOf { it.getJSONObject("intent").optInt("portions", 0) * it.getJSONObject("intent").optDouble("unit_price", 0.0) }
-        return """<?xml version="1.0" encoding="UTF-8"?><dat:dataPack xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd" version="2.0"><dat:dataPackItem id="INV_1" version="2.0"><totalAmount>$total</totalAmount></dat:dataPackItem></dat:dataPack>"""
-    }
-
-    private fun renderIsdocXml(): String {
-        return """<?xml version="1.0" encoding="UTF-8"?><Invoice xmlns="http://isdoc.cz/namespace/2013" version="6.0.2"><ID>INLOOP-STANDALONE</ID></Invoice>"""
     }
 }

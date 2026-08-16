@@ -1,7 +1,3 @@
-package cz.inloop.kds
-
-object EmbeddedHtml {
-    const val UI_HTML = """
 <!DOCTYPE html>
 <html lang="cs">
 <head>
@@ -17,7 +13,6 @@ object EmbeddedHtml {
             --stroke-glass: rgba(255, 255, 255, 0.08);
             --accent-cyan: #38bdf8;
             --emerald: #10b981;
-            --emerald-glow: rgba(16, 185, 129, 0.3);
             --rose: #f43f5e;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
@@ -131,7 +126,6 @@ object EmbeddedHtml {
         </div>
     </div>
 
-    <!-- Modals -->
     <div id="modal-error" class="modal">
         <div class="modal-sheet">
             <h3 style="color:var(--rose);">HACCP Stop-Stav</h3>
@@ -174,7 +168,7 @@ object EmbeddedHtml {
         }
 
         function showModal(id, msg) {
-            if (msg) document.querySelector(`#${id} p`).innerText = msg;
+            if (msg) document.querySelector("#" + id + " p").innerText = msg;
             document.getElementById(id).classList.add('active');
         }
 
@@ -220,7 +214,7 @@ object EmbeddedHtml {
 
             const r = await res.json();
             if (r.ui_feedback === "SUCCESS") {
-                showModal('modal-success', `Zapsáno: ${intent.item_name} (${intent.portions} ks).`);
+                showModal('modal-success', "Zapsáno: " + intent.item_name + " (" + intent.portions + " ks).");
                 loadRecords();
             }
         }
@@ -232,15 +226,14 @@ object EmbeddedHtml {
                 data.records.reverse().forEach(r => {
                     const isDisp = r.intent.action === 'DISPATCH_BATCH';
                     const date = new Date(r.bitemporal.transaction_time * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-                    feed.innerHTML += `
-                        <div class="stream-card">
-                            <div>
-                                <div class="stream-title">${r.intent.item_name}</div>
-                                <div class="stream-meta">${r.intent.portions} ks × ${r.intent.unit_price} Kč • ${r.intent.temperature} °C • ${date}</div>
-                            </div>
-                            <div class="badge-disp">${isDisp ? 'EXPEDOVÁNO' : 'PŘIJATO'}</div>
-                        </div>
-                    `;
+                    const html = '<div class="stream-card">' +
+                        '<div>' +
+                            '<div class="stream-title">' + r.intent.item_name + '</div>' +
+                            '<div class="stream-meta">' + r.intent.portions + ' ks × ' + r.intent.unit_price + ' Kč • ' + r.intent.temperature + ' °C • ' + date + '</div>' +
+                        '</div>' +
+                        '<div class="badge-disp">' + (isDisp ? 'EXPEDOVÁNO' : 'PŘIJATO') + '</div>' +
+                    '</div>';
+                    feed.insertAdjacentHTML('beforeend', html);
                 });
             });
         }
@@ -250,5 +243,3 @@ object EmbeddedHtml {
     </script>
 </body>
 </html>
-    """.trimIndent()
-}

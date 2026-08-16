@@ -17,19 +17,16 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. Spuštění vestavěného HTTP serveru na pozadí
         try {
-            server = KdsEmbeddedServer(port, filesDir)
+            server = KdsEmbeddedServer(port, applicationContext)
             server?.start()
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
-        // 2. Kiosk mód: Trvalé podsvícení a celoobrazovkový režim
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
 
-        // 3. Konfigurace WebView
         webView = WebView(this)
         setContentView(webView)
 
@@ -54,7 +51,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Načtení z vlastního vestavěného lokálního serveru
         webView.loadUrl("http://127.0.0.1:$port")
     }
 
