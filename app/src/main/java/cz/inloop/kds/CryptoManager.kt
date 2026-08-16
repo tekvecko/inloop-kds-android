@@ -13,17 +13,22 @@ object CryptoManager {
     private const val KEY_ALIAS = "inloop_kds_tee_master_key_v2"
     private const val KEYSTORE_NAME = "AndroidKeyStore"
 
-    fun initHardwareKey(): Boolean {
+    fun isKeyEnrolled(): Boolean {
         return try {
             val keyStore = KeyStore.getInstance(KEYSTORE_NAME).apply { load(null) }
-            if (!keyStore.containsAlias(KEY_ALIAS)) {
-                generateKey()
-            }
-            true
+            keyStore.containsAlias(KEY_ALIAS)
         } catch (e: Exception) {
-            e.printStackTrace()
             false
         }
+    }
+
+    fun registerNewChefKey(): String {
+        val keyStore = KeyStore.getInstance(KEYSTORE_NAME).apply { load(null) }
+        if (keyStore.containsAlias(KEY_ALIAS)) {
+            keyStore.deleteEntry(KEY_ALIAS)
+        }
+        generateKey()
+        return getPublicKeyBase64()
     }
 
     private fun generateKey() {
@@ -39,7 +44,7 @@ object CryptoManager {
             setUserAuthenticationRequired(true)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 setUserAuthenticationParameters(
-                    0, // 0 = vyžaduje autentizaci pro každé jednotlivé použití klíče
+                    0,
                     KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
                 )
             }
@@ -80,10 +85,10 @@ object CryptoManager {
     fun getPublicKeyBase64(): String {
         return try {
             val keyStore = KeyStore.getInstance(KEYSTORE_NAME).apply { load(null) }
-            val certificate = keyStore.getCertificate(KEY_ALIAS) ?: return "KEY_NOT_FOUND"
+            val certificate = keyStore.getCertificate(KEY_ALIAS) ?: return "NENÍ_REGISTROVÁN"
             Base64.getEncoder().encodeToString(certificate.publicKey.encoded)
         } catch (e: Exception) {
-            "HARDWARE_KEY_INITIALIZING"
+            "CHYBA_HARDWARE_KEY"
         }
     }
 }

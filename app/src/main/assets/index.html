@@ -55,7 +55,6 @@
             text-transform: uppercase;
         }
 
-        /* Adaptivní Workspace Grid: Na šířku 2 sloupce, na výšku 1 sloupec */
         .workspace {
             display: grid;
             grid-template-columns: 1.25fr 1fr;
@@ -188,7 +187,20 @@
             color: #fff;
         }
 
-        /* Scrollable feed */
+        .btn-enroll {
+            background: transparent;
+            border: 1px dashed var(--stroke-glass);
+            color: var(--text-dim);
+            padding: 0.4rem;
+            border-radius: 8px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+        .btn-enroll:hover { border-color: var(--accent-cyan); color: #fff; }
+
         .stream-container {
             flex: 1;
             overflow-y: auto;
@@ -199,9 +211,7 @@
             padding-right: 0.15rem;
         }
         @media (orientation: portrait) {
-            .stream-container {
-                max-height: 240px;
-            }
+            .stream-container { max-height: 240px; }
         }
         .stream-card {
             background: rgba(15, 23, 42, 0.55);
@@ -224,7 +234,6 @@
             font-weight: 800;
         }
 
-        /* Modals */
         .modal {
             position: fixed;
             inset: 0;
@@ -265,7 +274,7 @@
 
     <div class="nav-bar">
         <div class="brand"><span>INLOOP</span> TRUST KDS</div>
-        <div class="capsule">TEE BIOMETRIC ACTIVE</div>
+        <div class="capsule" id="enclave-status">TEE: INICIALIZACE</div>
     </div>
 
     <div class="workspace">
@@ -312,6 +321,8 @@
                 <button class="btn-act btn-dispatch" onclick="commitIntent('DISPATCH_BATCH')">EXPEDOVAT (OTISK)</button>
                 <button class="btn-act btn-accept" onclick="commitIntent('ACCEPT_BATCH')">PŘIJMOUT</button>
             </div>
+
+            <button class="btn-enroll" onclick="enrollChef()">✦ Registrovat / Spárovat otisk šéfkuchaře</button>
         </div>
 
         <div class="glass-panel">
@@ -347,6 +358,34 @@
         let temperature = 76.5;
         let currentIntent = null;
         let currentChallenge = null;
+
+        function checkEnclaveStatus() {
+            if (window.AndroidBridge && typeof window.AndroidBridge.getEnrolledKeyStatus === 'function') {
+                try {
+                    const status = JSON.parse(window.AndroidBridge.getEnrolledKeyStatus());
+                    if (status.enrolled) {
+                        document.getElementById('enclave-status').innerText = "ŠÉFKUCHAŘ SPÁROVÁN";
+                        document.getElementById('enclave-status').style.color = "var(--emerald)";
+                    } else {
+                        document.getElementById('enclave-status').innerText = "OTISK NENÍ SPÁROVÁN";
+                        document.getElementById('enclave-status').style.color = "var(--rose)";
+                    }
+                } catch(e){}
+            }
+        }
+
+        function enrollChef() {
+            if (window.AndroidBridge && typeof window.AndroidBridge.enrollChefKey === 'function') {
+                window.AndroidBridge.enrollChefKey();
+            } else {
+                showModal('modal-error', 'Android biometrické rozhraní není dostupné.');
+            }
+        }
+
+        window.onEnrollmentSuccess = function(publicKey) {
+            checkEnclaveStatus();
+            showModal('modal-success', 'Otisk šéfkuchaře byl úspěšně spárován a ukován v ARM TrustZone enklávě.');
+        };
 
         function selectDish(el, code, name, price) {
             document.querySelectorAll('.dish-card').forEach(c => c.classList.remove('active'));
@@ -407,7 +446,7 @@
                 if (window.AndroidBridge && typeof window.AndroidBridge.authenticateAndSign === 'function') {
                     window.AndroidBridge.authenticateAndSign(payloadToSign);
                 } else {
-                    showModal('modal-error', 'Android biometrický senzor není dostupný v tomto okně.');
+                    showModal('modal-error', 'Android biometrický senzor není dostupný.');
                 }
             } catch (err) {
                 showModal('modal-error', 'Chyba komunikace s uzlem: ' + err.message);
@@ -462,6 +501,7 @@
             }).catch(e => console.error(e));
         }
 
+        setTimeout(checkEnclaveStatus, 800);
         loadRecords();
         setInterval(loadRecords, 3000);
     </script>
