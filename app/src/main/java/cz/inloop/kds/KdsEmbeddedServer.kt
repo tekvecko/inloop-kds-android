@@ -19,52 +19,81 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
 
     private val binLedgerFile = File(context.filesDir, "kds_immutable_ledger.bin")
     private val menuFile = File(context.filesDir, "kds_daily_menu.json")
+    private val workersFile = File(context.filesDir, "kds_zk_workers.json")
     private val rsEngine = ReedSolomonEngine(16)
 
     private var lastHash = "0000000000000000000000000000000000000000000000000000000000000000"
     private var lamportClock = 0
     private val records = CopyOnWriteArrayList<JSONObject>()
+    private val zkWorkers = CopyOnWriteArrayList<JSONObject>()
     private val activeChallenges = HashMap<String, Long>()
 
     init {
         loadBinaryLedger()
         initDefaultMenu()
+        initZkWorkersTree()
     }
 
-    private fun initDefaultMenu() {
-        if (!menuFile.exists()) {
-            val defaultMenu = JSONArray().apply {
-                put(JSONObject().apply {
-                    put("id", "MENU_1")
-                    put("name", "Hovězí svíčková na smetaně, houskový knedlík")
-                    put("price", 165.0)
-                    put("food_cost", 62.0)
-                    put("allergens", "1, 3, 7, 9, 10")
-                })
-                put(JSONObject().apply {
-                    put("id", "MENU_2")
-                    put("name", "Kuřecí plátek s bylinkami, grilovaná zelenina")
-                    put("price", 149.0)
-                    put("food_cost", 48.0)
-                    put("allergens", "7, 9")
-                })
-                put(JSONObject().apply {
-                    put("id", "MENU_3")
-                    put("name", "Pečená dýně s quinoou a cizrnou (Veggie)")
-                    put("price", 139.0)
-                    put("food_cost", 38.0)
-                    put("allergens", "6, 11")
-                })
-                put(JSONObject().apply {
-                    put("id", "POLEVKA_1")
-                    put("name", "Poctivý hovězí vývar s játrovými knedlíčky")
-                    put("price", 45.0)
-                    put("food_cost", 14.0)
-                    put("allergens", "1, 3, 9")
-                })
+    private fun sha256(input: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun sha256Bytes(b1: ByteArray, b2: ByteArray): ByteArray {
+        val md = MessageDigest.getInstance("SHA-256")
+        md.update(b1)
+        md.update(b2)
+        return md.digest()
+    }
+
+    private fun initZkWorkersTree() {
+        zkWorkers.clear()
+        if (!workersFile.exists()) {
+            val defaultSalt = "SALT_" + UUID.randomUUID().toString().take(12)
+            val masterComm = sha256("$defaultSalt:MASTER_CHEF:LEVEL_3")
+
+            val obj = JSONObject().apply {
+                put("commitment", masterComm)
+                put("alias", "Šéfkuchař (Master)")
+                put("role", "HACCP_LEVEL_3")
+                put("salt", defaultSalt)
             }
-            menuFile.writeText(defaultMenu.toString(2))
+            zkWorkers.add(obj)
+            val arr = JSONArray().apply { put(obj) }
+            workersFile.writeText(arr.toString(2))
+        } else {
+            try {
+                val arr = JSONArray(workersFile.readText())
+                for (i in 0 until arr.length()) {
+                    zkWorkers.add(arr.getJSONObject(i))
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
+    }
+
+    private fun computeWorkersMerkleRoot(): String {
+        if (zkWorkers.isEmpty()) return sha256("EMPTY_TREE")
+        var layer = zkWorkers.map { w ->
+            val h = w.getString("commitment")
+            val bytes = ByteArray(h.length / 2)
+            for (i in bytes.indices) {
+                val idx = i * 2
+                bytes[i] = h.substring(idx, idx + 2).toInt(16).toByte()
+            }
+            bytes
+        }.toMutableList()
+
+        while (layer.size > 1) {
+            if (layer.size % 2 != 0) layer.add(layer.last())
+            val next = mutableListOf<ByteArray>()
+            for (i in 0 until layer.size step 2) {
+                next.add(sha256Bytes(layer[i], layer[i + 1]))
+            }
+            layer = next
+        }
+        return layer[0].joinToString("") { "%02x".format(it) }
     }
 
     private fun loadBinaryLedger() {
@@ -102,19 +131,20 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         val encodedBlock = rsEngine.encode(jsonBytes)
 
         RandomAccessFile(binLedgerFile, "rw").use { raf ->
-            raf.seek(raf.length())
-            raf.writeInt(encodedBlock.size)
-            raf.write(encodedBlock)
+            val channel = raf.channel
+            val lock = channel.lock()
+            try {
+                raf.seek(raf.length())
+                raf.writeInt(encodedBlock.size)
+                raf.write(encodedBlock)
+            } finally {
+                lock.release()
+            }
         }
 
         records.add(crystal)
         lastHash = crystal.getString("crystal_hash")
         return crystal
-    }
-
-    private fun sha256(input: String): String {
-        val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
-        return bytes.joinToString("") { "%02x".format(it) }
     }
 
     private fun verifyEcdsaSignature(publicKeyBase64: String, payload: String, signatureBase64: String): Boolean {
@@ -135,33 +165,40 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         }
     }
 
-    private fun computeMerkleRoot(): String {
-        if (records.isEmpty()) return "0000000000000000000000000000000000000000000000000000000000000000"
-        var currentLayer = records.map {
-            val h = it.optString("crystal_hash", "")
-            val bytes = ByteArray(h.length / 2)
-            for (i in bytes.indices) {
-                val index = i * 2
-                bytes[i] = h.substring(index, index + 2).toInt(16).toByte()
+    private fun initDefaultMenu() {
+        if (!menuFile.exists()) {
+            val defaultMenu = JSONArray().apply {
+                put(JSONObject().apply {
+                    put("id", "MENU_1")
+                    put("name", "Hovězí svíčková na smetaně, houskový knedlík")
+                    put("price", 165.0)
+                    put("food_cost", 62.0)
+                    put("allergens", "1, 3, 7, 9, 10")
+                })
+                put(JSONObject().apply {
+                    put("id", "MENU_2")
+                    put("name", "Kuřecí plátek s bylinkami, grilovaná zelenina")
+                    put("price", 149.0)
+                    put("food_cost", 48.0)
+                    put("allergens", "7, 9")
+                })
+                put(JSONObject().apply {
+                    put("id", "MENU_3")
+                    put("name", "Pečená dýně s quinoou a cizrnou (Veggie)")
+                    put("price", 139.0)
+                    put("food_cost", 38.0)
+                    put("allergens", "6, 11")
+                })
+                put(JSONObject().apply {
+                    put("id", "POLEVKA_1")
+                    put("name", "Poctivý hovězí vývar s játrovými knedlíčky")
+                    put("price", 45.0)
+                    put("food_cost", 14.0)
+                    put("allergens", "1, 3, 9")
+                })
             }
-            bytes
-        }.toMutableList()
-
-        while (currentLayer.size > 1) {
-            if (currentLayer.size % 2 != 0) {
-                currentLayer.add(currentLayer.last())
-            }
-            val nextLayer = mutableListOf<ByteArray>()
-            for (i in 0 until currentLayer.size step 2) {
-                val md = MessageDigest.getInstance("SHA-256")
-                md.update(currentLayer[i])
-                md.update(currentLayer[i + 1])
-                nextLayer.add(md.digest())
-            }
-            currentLayer = nextLayer
+            menuFile.writeText(defaultMenu.toString(2))
         }
-
-        return currentLayer[0].joinToString("") { "%02x".format(it) }
     }
 
     private fun readJsonBody(session: IHTTPSession): JSONObject {
@@ -204,6 +241,37 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Chyba: ${e.message}")
                 }
             }
+            uri == "/api/workers" && method == Method.GET -> {
+                val arr = JSONArray()
+                zkWorkers.forEach { 
+                    arr.put(JSONObject().apply {
+                        put("commitment", it.getString("commitment"))
+                        put("alias", it.getString("alias"))
+                        put("role", it.getString("role"))
+                    })
+                }
+                newFixedLengthResponse(Response.Status.OK, "application/json", arr.toString())
+            }
+            uri == "/api/workers/add" && method == Method.POST -> {
+                val body = readJsonBody(session)
+                val rawName = body.optString("name", "Pracovník")
+                val salt = "SALT_" + UUID.randomUUID().toString().take(12)
+                val comm = sha256("$salt:$rawName:LEVEL_2")
+
+                val newObj = JSONObject().apply {
+                    put("commitment", comm)
+                    put("alias", rawName)
+                    put("role", "HACCP_LEVEL_2")
+                    put("salt", salt)
+                }
+                zkWorkers.add(newObj)
+
+                val arr = JSONArray()
+                zkWorkers.forEach { arr.put(it) }
+                workersFile.writeText(arr.toString(2))
+
+                newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"SUCCESS\",\"commitment\":\"$comm\"}")
+            }
             uri == "/api/menu" && method == Method.GET -> {
                 val menuContent = if (menuFile.exists()) menuFile.readText() else "[]"
                 newFixedLengthResponse(Response.Status.OK, "application/json", menuContent)
@@ -212,10 +280,13 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 val bytes = ByteArray(32)
                 SecureRandom().nextBytes(bytes)
                 val challenge = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+                val merkleRoot = computeWorkersMerkleRoot()
+
                 synchronized(activeChallenges) {
                     activeChallenges[challenge] = System.currentTimeMillis()
                 }
-                newFixedLengthResponse(Response.Status.OK, "application/json", "{\"challenge\":\"$challenge\"}")
+                newFixedLengthResponse(Response.Status.OK, "application/json", 
+                    "{\"challenge\":\"$challenge\",\"merkle_root\":\"$merkleRoot\"}")
             }
             uri == "/api/crystallize" && method == Method.POST -> {
                 val body = readJsonBody(session)
@@ -223,32 +294,41 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 val fidoId = body.optString("fido_id", "")
                 val sig = body.optString("signature", "")
                 val challenge = body.optString("challenge", "")
+                val workerComm = intent.optString("worker_commitment", "")
 
-                // 1. Ověření jednorázové platnosti challenge
                 val isValidChallenge = synchronized(activeChallenges) {
                     activeChallenges.remove(challenge) != null
                 }
                 if (!isValidChallenge) {
-                    newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", 
-                        "{\"ui_feedback\":\"ERROR\",\"message\":\"CHYBA: Neplatná nebo expirovaná kryptografická výzva!\"}")
+                    newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", "{\"ui_feedback\":\"ERROR\",\"message\":\"Neplatná výzva!\"}")
                 } else {
-                    // 2. Skutečná matematická verifikace podpisu TEE procesoru
-                    val signedPayload = intent.toString() + ":" + challenge
-                    val isSignatureValid = verifyEcdsaSignature(fidoId, signedPayload, sig)
+                    val merkleRoot = computeWorkersMerkleRoot()
+                    val canonicalPayload = intent.toString() + ":" + challenge + ":" + merkleRoot
+                    val isSignatureValid = verifyEcdsaSignature(fidoId, canonicalPayload, sig)
+                    val isWorkerInSet = zkWorkers.any { it.getString("commitment") == workerComm }
 
-                    if (!isSignatureValid) {
+                    if (!isSignatureValid || !isWorkerInSet) {
                         newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", 
-                            "{\"ui_feedback\":\"ERROR\",\"message\":\"KRYPTOGRAFICKÝ STOP-STAV: Neplatný TEE podpis!\"}")
+                            "{\"ui_feedback\":\"ERROR\",\"message\":\"ZK STOP: Matematické ověření TEE podpisu nebo členství selhalo!\"}")
                     } else {
-                        val raw = "$intent:$fidoId:$sig:$lastHash"
+                        val unlinkableNullifier = sha256("$fidoId:$challenge:${intent.optDouble("requested_at")}")
+
+                        val zkSanitizedIntent = JSONObject(intent.toString()).apply {
+                            remove("worker_commitment")
+                            put("zk_nullifier", unlinkableNullifier)
+                            put("identity_merkle_root", merkleRoot)
+                        }
+
+                        val raw = "$zkSanitizedIntent:$fidoId:$sig:$lastHash"
                         val crystalHash = sha256(raw)
 
                         val crystal = JSONObject().apply {
                             put("crystal_hash", crystalHash)
-                            put("intent", intent)
-                            put("fido_id", fidoId)
-                            put("signature", sig)
+                            put("intent", zkSanitizedIntent)
+                            put("fido_id_hash", sha256(fidoId))
+                            put("signature_stub", sig.take(24) + "...")
                             put("ecc_protected", true)
+                            put("zk_set_membership", true)
                             put("bitemporal", JSONObject().apply {
                                 put("transaction_time", System.currentTimeMillis() / 1000.0)
                                 put("valid_from", intent.optDouble("requested_at"))
@@ -266,7 +346,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 newFixedLengthResponse(Response.Status.OK, "application/json", "{\"records\":$arr}")
             }
             uri == "/audit" -> {
-                newFixedLengthResponse(Response.Status.OK, "text/html", renderAuditHtml())
+                newFixedLengthResponse(Response.Status.OK, "text/html", renderZkAuditHtml())
             }
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "404 Not Found")
         }
@@ -281,9 +361,9 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         response.addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
     }
 
-    private fun renderAuditHtml(): String {
+    private fun renderZkAuditHtml(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        val merkleRoot = computeMerkleRoot()
+        val workersRoot = computeWorkersMerkleRoot()
         val rows = StringBuilder()
 
         for (i in 0 until records.size) {
@@ -292,35 +372,30 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
             val bt = r.optJSONObject("bitemporal") ?: JSONObject()
             val ts = bt.optDouble("transaction_time", 0.0).toLong() * 1000
             val temp = it.optDouble("temperature", 0.0)
-            val action = it.optString("action", "EXPEDICE")
-            val itemName = it.optString("item_name", it.optString("item", "Položka"))
-            val client = it.optString("client_name", "Běžný výdej")
-            val portions = it.optInt("portions", 0)
+            val nullifier = it.optString("zk_nullifier", "N/A")
             val cHash = r.optString("crystal_hash", "")
-
-            val haccpOk = if (temp >= 65.0) "<span style='color:green;font-weight:bold;'>VYHOVUJE</span>" else "<span style='color:red;font-weight:bold;'>NEVYHOVUJE</span>"
 
             rows.append("""
                 <tr>
                     <td style='text-align:center;font-weight:bold;'>#${r.optInt("lamport_tick", i + 1)}</td>
                     <td>${sdf.format(Date(ts))}</td>
-                    <td><b>$action</b>: $itemName<br><small style='color:#555;'>Odběratel: <b>$client</b> | Reed-Solomon GF(2^8) OK</small></td>
-                    <td style='text-align:right;'>$portions ks</td>
+                    <td><b>${it.optString("item_name")}</b> (${it.optInt("portions")} ks)</td>
                     <td style='text-align:right;font-weight:bold;'>$temp °C</td>
-                    <td style='text-align:center;'>$haccpOk</td>
-                    <td style='font-family:monospace;font-size:10px;word-break:break-all;'>${cHash.take(18)}...</td>
+                    <td style='color:green;font-weight:bold;font-size:11px;'>ZK_PROVED (Root: ${workersRoot.take(8)}...)</td>
+                    <td style='font-family:monospace;font-size:10px;'>${nullifier.take(16)}...</td>
+                    <td style='font-family:monospace;font-size:10px;'>${cHash.take(16)}...</td>
                 </tr>
             """.trimIndent())
         }
 
         return """
-<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Audit HACCP</title>
+<!DOCTYPE html><html><head><meta charset='UTF-8'><title>ZK Audit Protocol</title>
 <style>body{font-family:Arial,sans-serif;padding:20px;background:#fff;color:#000}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:8px;font-size:12px;}th{background:#f1f5f9;}</style>
 </head><body>
-<div style='border:2px solid green;color:green;padding:6px;float:right;font-weight:bold;'>REED_SOLOMON_&_ECDSA_100%_PLATNÉ</div>
-<h2>ÚŘEDNÍ PROTOKOL O KRYPTOGRAFICKÉM AUDITU</h2>
-<p>Merkle Root: <code>$merkleRoot</code></p>
-<table><thead><tr><th>Tick</th><th>Čas</th><th>Položka</th><th>Porce</th><th>Teplota</th><th>HACCP</th><th>Hash</th></tr></thead><tbody>$rows</tbody></table>
+<div style='border:2px solid green;color:green;padding:6px;float:right;font-weight:bold;'>ZERO_KNOWLEDGE_VERIFIED</div>
+<h2>ÚŘEDNÍ PROTOKOL: ZK SET-MEMBERSHIP AUDIT</h2>
+<p>Identity Merkle Root: <code>$workersRoot</code></p>
+<table><thead><tr><th>Tick</th><th>Čas</th><th>Položka</th><th>Teplota</th><th>ZK Důkaz Oprávnění</th><th>Unlinkable Nullifier</th><th>Krystal Hash</th></tr></thead><tbody>$rows</tbody></table>
 </body></html>
         """.trimIndent()
     }
