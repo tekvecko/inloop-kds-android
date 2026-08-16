@@ -44,11 +44,11 @@ class MainActivity : AppCompatActivity() {
             e.printStackTrace()
         }
 
-        // 3. Kiosk / Fullscreen nastavení
+        // 3. Kiosk / Fullscreen nastavení s podporou rotace
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
 
-        // 4. WebView konfigurace
+        // 4. WebView konfigurace s optimálním viewport scalingem
         webView = WebView(this)
         setContentView(webView)
 
@@ -58,6 +58,8 @@ class MainActivity : AppCompatActivity() {
         settings.databaseEnabled = true
         settings.allowFileAccess = true
         settings.allowContentAccess = true
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         // Registrace JavaScript Interface
