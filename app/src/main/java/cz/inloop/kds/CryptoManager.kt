@@ -13,6 +13,16 @@ object CryptoManager {
     private const val KEY_ALIAS = "inloop_kds_tee_master_key_v2"
     private const val KEYSTORE_NAME = "AndroidKeyStore"
 
+    fun initHardwareKey() {
+        if (!isKeyEnrolled()) {
+            try {
+                generateKey()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun isKeyEnrolled(): Boolean {
         return try {
             val keyStore = KeyStore.getInstance(KEYSTORE_NAME).apply { load(null) }

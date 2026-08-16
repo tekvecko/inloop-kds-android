@@ -69,7 +69,6 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest?) {
-                // Automatické udělení oprávnění pro mikrofon a Bluetooth v Kiosku
                 request?.grant(request.resources)
             }
         }
