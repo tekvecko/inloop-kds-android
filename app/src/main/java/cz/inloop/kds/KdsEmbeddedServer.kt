@@ -72,8 +72,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
     }
 
     @Synchronized
-    private fun saveB2bOrder(order: JSONObject) {
-        b2bOrders.add(order)
+    private fun saveB2bOrders() {
         val arr = JSONArray()
         b2bOrders.forEach { arr.put(it) }
         ordersFile.writeText(arr.toString(2), Charsets.UTF_8)
@@ -271,7 +270,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     val html = context.assets.open("index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
                     newFixedLengthResponse(Status.OK, mimeHtml, html)
                 } catch (e: Exception) {
-                    newFixedLengthResponse(Status.INTERNAL_ERROR, mimePlain, "Chyba načtení šablony: ${e.message}")
+                    newFixedLengthResponse(Status.INTERNAL_ERROR, mimePlain, "Chyba načtení: ${e.message}")
                 }
             }
             uri == "/portal" -> {
@@ -281,13 +280,35 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 val body = readJsonBody(session)
                 body.put("created_at", System.currentTimeMillis() / 1000.0)
                 body.put("order_id", "ORD_" + System.currentTimeMillis().toString().takeLast(6))
-                saveB2bOrder(body)
-                newFixedLengthResponse(Status.OK, mimeJson, "{\"status\":\"SUCCESS\",\"message\":\"Objednávka přijata do fronty.\"}")
+                body.put("stage", "RECEIVED") // Výchozí stav: Příjem
+                b2bOrders.add(body)
+                saveB2bOrders()
+                newFixedLengthResponse(Status.OK, mimeJson, "{\"status\":\"SUCCESS\",\"message\":\"Objednávka přijata do příjmu.\"}")
             }
             uri == "/api/portal/summary" && method == Method.GET -> {
                 val arr = JSONArray()
                 b2bOrders.forEach { arr.put(it) }
                 newFixedLengthResponse(Status.OK, mimeJson, "{\"orders\":$arr}")
+            }
+            uri == "/api/orders/transition" && method == Method.POST -> {
+                val body = readJsonBody(session)
+                val orderId = body.optString("order_id")
+                val targetStage = body.optString("stage") // PREPARING nebo DISPATCHED
+
+                var updated = false
+                for (o in b2bOrders) {
+                    if (o.optString("order_id") == orderId) {
+                        o.put("stage", targetStage)
+                        updated = true
+                        break
+                    }
+                }
+                if (updated) {
+                    saveB2bOrders()
+                    newFixedLengthResponse(Status.OK, mimeJson, "{\"status\":\"SUCCESS\"}")
+                } else {
+                    newFixedLengthResponse(Status.NOT_FOUND, mimeJson, "{\"status\":\"ERROR\",\"message\":\"Objednávka nenalezena\"}")
+                }
             }
             uri == "/api/workers" && method == Method.GET -> {
                 val arr = JSONArray()
@@ -382,6 +403,14 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                         }
 
                         val stored = appendCrystalBin(crystal)
+
+                        // Pokud šlo o konkrétní B2B objednávku, označíme ji jako DISPATCHED
+                        val linkedOrderId = intent.optString("order_id", "")
+                        if (linkedOrderId.isNotEmpty()) {
+                            b2bOrders.find { it.optString("order_id") == linkedOrderId }?.put("stage", "DISPATCHED")
+                            saveB2bOrders()
+                        }
+
                         newFixedLengthResponse(Status.OK, mimeJson, "{\"ui_feedback\":\"SUCCESS\",\"crystal\":$stored}")
                     }
                 }
@@ -418,52 +447,43 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Firemní Objednávka Obědů | InLoop B2B</title>
+    <title>B2B Objednávkový Portál | InLoop</title>
     <style>
         body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 1.5rem; max-width: 600px; margin: auto; }
-        .card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem; }
+        .card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 1.2rem; }
         h2 { color: #38bdf8; margin-top: 0; }
-        input, select { width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; padding: 0.8rem; border-radius: 8px; margin-top: 0.3rem; margin-bottom: 0.8rem; box-sizing: border-box; }
+        input, select { width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; padding: 0.8rem; border-radius: 8px; margin: 0.4rem 0 0.8rem 0; box-sizing: border-box; }
         .menu-item { border-bottom: 1px solid #334155; padding: 0.6rem 0; display: flex; justify-content: space-between; align-items: center; }
-        .btn { background: linear-gradient(135deg, #38bdf8, #2563eb); color: #000; font-weight: 800; border: none; padding: 1rem; border-radius: 10px; width: 100%; cursor: pointer; font-size: 1rem; }
+        .btn { background: linear-gradient(135deg, #38bdf8, #2563eb); color: #000; font-weight: 900; border: none; padding: 1rem; border-radius: 10px; width: 100%; cursor: pointer; font-size: 1rem; margin-top: 0.8rem; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>Firemní Obědy (Uzávěrka 9:30)</h2>
-        <p style="color:#94a3b8; font-size:0.85rem;">Objednávka se propíše přímo do expedičního plánu kuchyně.</p>
-        
-        <label>Vaše Firma / Odběratel:</label>
+        <h2>Firemní Obědy (B2B Objednávka)</h2>
+        <label>Firma / Odběratel:</label>
         <select id="company-select">
             <option value="Siemens Brno">Siemens Brno</option>
             <option value="Honeywell">Honeywell</option>
             <option value="Kanceláře Slavkov">Kanceláře Slavkov</option>
             <option value="Jídelna výdej">Jídelna výdej</option>
         </select>
-
         <label>Počet porcí:</label>
         <input type="number" id="portions-count" value="10" min="1" max="250">
-
-        <label>Výběr menu:</label>
+        <label>Výběr pokrmu:</label>
         <div id="portal-menu-list"></div>
-
         <button class="btn" onclick="submitOrder()">ODESLAT OBJEDNÁVKU DO KUCHYNĚ</button>
     </div>
-
     <script>
         const menu = $menuContent;
         let selectedMenuId = menu[0]?.id || "";
-
         const container = document.getElementById('portal-menu-list');
         menu.forEach((m, idx) => {
-            container.innerHTML += '<div class="menu-item"><div><b>' + m.id + ': ' + m.name + '</b><br><small style="color:#94a3b8;">' + m.price + ' Kč | Alergeny: ' + (m.allergens || '-') + '</small></div><input type="radio" name="dish_pick" value="' + m.id + '" ' + (idx===0?'checked':'') + ' onchange="selectedMenuId=\'' + m.id + '\'" style="width:20px; height:20px;"></div>';
+            container.innerHTML += '<div class="menu-item"><div><b>' + m.id + ': ' + m.name + '</b><br><small style="color:#94a3b8;">' + m.price + ' Kč</small></div><input type="radio" name="dish_pick" value="' + m.id + '" ' + (idx===0?'checked':'') + ' onchange="selectedMenuId=\'' + m.id + '\'" style="width:20px; height:20px;"></div>';
         });
-
         function submitOrder() {
             const company = document.getElementById('company-select').value;
             const count = parseInt(document.getElementById('portions-count').value) || 1;
             const pickedDish = menu.find(m => m.id === selectedMenuId);
-
             fetch('/api/portal/order', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -475,7 +495,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     portions: count
                 })
             }).then(r => r.json()).then(d => {
-                alert("Objednávka pro " + company + " (" + count + " ks) byla odeslána do KDS!");
+                alert("Objednávka pro " + company + " byla odeslána do Příjmu KDS!");
             });
         }
     </script>
