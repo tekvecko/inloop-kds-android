@@ -23,20 +23,24 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
     private val binLedgerFile = File(context.filesDir, "kds_immutable_ledger.bin")
     private val menuFile = File(context.filesDir, "kds_daily_menu.json")
     private val workersFile = File(context.filesDir, "kds_zk_workers.json")
+    private val ordersFile = File(context.filesDir, "kds_b2b_orders.json")
     private val rsEngine = ReedSolomonEngine(16)
 
     private val mimeJson = "application/json; charset=UTF-8"
     private val mimeHtml = "text/html; charset=UTF-8"
     private val mimePlain = "text/plain; charset=UTF-8"
+    private val mimeXml = "application/xml; charset=UTF-8"
 
     private var lastHash = "0000000000000000000000000000000000000000000000000000000000000000"
     private var lamportClock = 0
     private val records = CopyOnWriteArrayList<JSONObject>()
     private val zkWorkers = CopyOnWriteArrayList<JSONObject>()
+    private val b2bOrders = CopyOnWriteArrayList<JSONObject>()
     private val activeChallenges = HashMap<String, Long>()
 
     init {
         loadBinaryLedger()
+        loadB2bOrders()
         initDefaultMenu()
         initZkWorkersTree()
     }
@@ -51,6 +55,28 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         md.update(b1)
         md.update(b2)
         return md.digest()
+    }
+
+    private fun loadB2bOrders() {
+        if (ordersFile.exists()) {
+            try {
+                val array = JSONArray(ordersFile.readText(Charsets.UTF_8))
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    b2bOrders.add(obj)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    @Synchronized
+    private fun saveB2bOrder(order: JSONObject) {
+        b2bOrders.add(order)
+        val arr = JSONArray()
+        b2bOrders.forEach { arr.put(it) }
+        ordersFile.writeText(arr.toString(2), Charsets.UTF_8)
     }
 
     private fun initZkWorkersTree() {
@@ -245,8 +271,23 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     val html = context.assets.open("index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
                     newFixedLengthResponse(Status.OK, mimeHtml, html)
                 } catch (e: Exception) {
-                    newFixedLengthResponse(Status.INTERNAL_ERROR, mimePlain, "Chyba: ${e.message}")
+                    newFixedLengthResponse(Status.INTERNAL_ERROR, mimePlain, "Chyba načtení šablony: ${e.message}")
                 }
+            }
+            uri == "/portal" -> {
+                newFixedLengthResponse(Status.OK, mimeHtml, renderB2bPortalHtml())
+            }
+            uri == "/api/portal/order" && method == Method.POST -> {
+                val body = readJsonBody(session)
+                body.put("created_at", System.currentTimeMillis() / 1000.0)
+                body.put("order_id", "ORD_" + System.currentTimeMillis().toString().takeLast(6))
+                saveB2bOrder(body)
+                newFixedLengthResponse(Status.OK, mimeJson, "{\"status\":\"SUCCESS\",\"message\":\"Objednávka přijata do fronty.\"}")
+            }
+            uri == "/api/portal/summary" && method == Method.GET -> {
+                val arr = JSONArray()
+                b2bOrders.forEach { arr.put(it) }
+                newFixedLengthResponse(Status.OK, mimeJson, "{\"orders\":$arr}")
             }
             uri == "/api/workers" && method == Method.GET -> {
                 val arr = JSONArray()
@@ -353,6 +394,9 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
             uri == "/audit" -> {
                 newFixedLengthResponse(Status.OK, mimeHtml, renderZkAuditHtml())
             }
+            uri == "/api/export/pohoda.xml" -> {
+                newFixedLengthResponse(Status.OK, mimeXml, renderPohodaXml())
+            }
             else -> newFixedLengthResponse(Status.NOT_FOUND, mimePlain, "404 Not Found")
         }
 
@@ -364,6 +408,116 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
         response.addHeader("Access-Control-Allow-Origin", "*")
         response.addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         response.addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    }
+
+    private fun renderB2bPortalHtml(): String {
+        val menuContent = if (menuFile.exists()) menuFile.readText(Charsets.UTF_8) else "[]"
+        return """
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firemní Objednávka Obědů | InLoop B2B</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 1.5rem; max-width: 600px; margin: auto; }
+        .card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem; }
+        h2 { color: #38bdf8; margin-top: 0; }
+        input, select { width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; padding: 0.8rem; border-radius: 8px; margin-top: 0.3rem; margin-bottom: 0.8rem; box-sizing: border-box; }
+        .menu-item { border-bottom: 1px solid #334155; padding: 0.6rem 0; display: flex; justify-content: space-between; align-items: center; }
+        .btn { background: linear-gradient(135deg, #38bdf8, #2563eb); color: #000; font-weight: 800; border: none; padding: 1rem; border-radius: 10px; width: 100%; cursor: pointer; font-size: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Firemní Obědy (Uzávěrka 9:30)</h2>
+        <p style="color:#94a3b8; font-size:0.85rem;">Objednávka se propíše přímo do expedičního plánu kuchyně.</p>
+        
+        <label>Vaše Firma / Odběratel:</label>
+        <select id="company-select">
+            <option value="Siemens Brno">Siemens Brno</option>
+            <option value="Honeywell">Honeywell</option>
+            <option value="Kanceláře Slavkov">Kanceláře Slavkov</option>
+            <option value="Jídelna výdej">Jídelna výdej</option>
+        </select>
+
+        <label>Počet porcí:</label>
+        <input type="number" id="portions-count" value="10" min="1" max="250">
+
+        <label>Výběr menu:</label>
+        <div id="portal-menu-list"></div>
+
+        <button class="btn" onclick="submitOrder()">ODESLAT OBJEDNÁVKU DO KUCHYNĚ</button>
+    </div>
+
+    <script>
+        const menu = $menuContent;
+        let selectedMenuId = menu[0]?.id || "";
+
+        const container = document.getElementById('portal-menu-list');
+        menu.forEach((m, idx) => {
+            container.innerHTML += '<div class="menu-item"><div><b>' + m.id + ': ' + m.name + '</b><br><small style="color:#94a3b8;">' + m.price + ' Kč | Alergeny: ' + (m.allergens || '-') + '</small></div><input type="radio" name="dish_pick" value="' + m.id + '" ' + (idx===0?'checked':'') + ' onchange="selectedMenuId=\'' + m.id + '\'" style="width:20px; height:20px;"></div>';
+        });
+
+        function submitOrder() {
+            const company = document.getElementById('company-select').value;
+            const count = parseInt(document.getElementById('portions-count').value) || 1;
+            const pickedDish = menu.find(m => m.id === selectedMenuId);
+
+            fetch('/api/portal/order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    company: company,
+                    dish_id: pickedDish.id,
+                    dish_name: pickedDish.name,
+                    price: pickedDish.price,
+                    portions: count
+                })
+            }).then(r => r.json()).then(d => {
+                alert("Objednávka pro " + company + " (" + count + " ks) byla odeslána do KDS!");
+            });
+        }
+    </script>
+</body>
+</html>
+        """.trimIndent()
+    }
+
+    private fun renderPohodaXml(): String {
+        val dispatched = records.filter { it.optJSONObject("intent")?.optString("action") == "DISPATCH_BATCH" }
+        val itemsXml = StringBuilder()
+        dispatched.forEach { r ->
+            val it = r.getJSONObject("intent")
+            itemsXml.append("""
+                <inv:invoiceItem>
+                    <inv:text>${it.optString("item_name")} (Klient: ${it.optString("client_name")})</inv:text>
+                    <inv:quantity>${it.optInt("portions")}</inv:quantity>
+                    <inv:unit>porce</inv:unit>
+                    <inv:unitPrice>${it.optDouble("unit_price")}</inv:unitPrice>
+                    <inv:payVAT>true</inv:payVAT>
+                    <inv:rateVAT>12</inv:rateVAT>
+                </inv:invoiceItem>
+            """.trimIndent())
+        }
+
+        return """<?xml version="1.0" encoding="UTF-8"?>
+<dat:dataPack xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
+              xmlns:inv="http://www.stormware.cz/schema/version_2/invoice.xsd"
+              id="INLOOP_${System.currentTimeMillis()}" version="2.0">
+    <dat:dataPackItem id="INV_001" version="2.0">
+        <inv:invoice version="2.0">
+            <inv:invoiceHeader>
+                <inv:invoiceType>issuedInvoice</inv:invoiceType>
+                <inv:date>${SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())}</inv:date>
+                <inv:text>Vyúčtování stravného KDS TEE</inv:text>
+            </inv:invoiceHeader>
+            <inv:invoiceDetail>
+                $itemsXml
+            </inv:invoiceDetail>
+        </inv:invoice>
+    </dat:dataPackItem>
+</dat:dataPack>"""
     }
 
     private fun renderZkAuditHtml(): String {
