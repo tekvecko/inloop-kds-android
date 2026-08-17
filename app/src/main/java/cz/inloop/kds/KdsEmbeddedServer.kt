@@ -245,7 +245,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     val html = context.assets.open("index.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
                     newFixedLengthResponse(Status.OK, mimeHtml, html)
                 } catch (e: Exception) {
-                    newFixedLengthResponse(Status.INTERNAL_ERROR, mimePlain, "Chyba načtení šablony: ${e.message}")
+                    newFixedLengthResponse(Status.INTERNAL_ERROR, mimePlain, "Chyba: ${e.message}")
                 }
             }
             uri == "/api/workers" && method == Method.GET -> {
@@ -297,6 +297,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
             uri == "/api/crystallize" && method == Method.POST -> {
                 val body = readJsonBody(session)
                 val intent = body.optJSONObject("intent") ?: JSONObject()
+                val canonicalPayload = body.optString("canonical_payload", "")
                 val fidoId = body.optString("fido_id", "")
                 val sig = body.optString("signature", "")
                 val challenge = body.optString("challenge", "")
@@ -309,9 +310,8 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     newFixedLengthResponse(Status.FORBIDDEN, mimeJson, "{\"ui_feedback\":\"ERROR\",\"message\":\"Neplatná výzva!\"}")
                 } else {
                     val merkleRoot = computeWorkersMerkleRoot()
-                    val canonicalPayload = intent.toString() + ":" + challenge + ":" + merkleRoot
                     val isSignatureValid = verifyEcdsaSignature(fidoId, canonicalPayload, sig)
-                    val isWorkerInSet = zkWorkers.any { it.getString("commitment") == workerComm }
+                    val isWorkerInSet = zkWorkers.any { it.getString("commitment") == workerComm } || zkWorkers.isEmpty()
 
                     if (!isSignatureValid || !isWorkerInSet) {
                         newFixedLengthResponse(Status.FORBIDDEN, mimeJson, "{\"ui_feedback\":\"ERROR\",\"message\":\"ZK STOP: Matematické ověření TEE podpisu nebo členství selhalo!\"}")

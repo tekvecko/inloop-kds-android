@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>InLoop ATM-KDS ZK Protected</title>
+    <title>InLoop ATM-KDS ZK</title>
     <style>
         :root {
             --bg-atm: #040914;
@@ -182,7 +182,7 @@
             <div style="font-size:3rem; margin-bottom:0.5rem;">👆</div>
             <h3 style="color:#fff; margin-bottom:0.4rem;">PŘILOŽTE PRST</h3>
             <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:1rem;" id="fp-worker-info">
-                Generování ZK-Nullifieru a TEE podpisu
+                Generování ZK-Nullifieru v TEE procesoru
             </p>
             <button class="dialog-btn" style="background:#ff3366; color:#fff;" onclick="cancelFingerprint()">ZRUŠIT</button>
         </div>
@@ -209,6 +209,7 @@
         let currentChallenge = null;
         let currentMerkleRoot = null;
         let currentIntent = null;
+        let currentCanonicalPayload = null;
 
         const haptic = (p = [35]) => { if (navigator.vibrate) navigator.vibrate(p); };
 
@@ -253,7 +254,6 @@
             }
         }
 
-        // Skryté gesto pro Admin Panel (1.5s na logu)
         let pressTimer = null;
         const logoBtn = document.getElementById('secret-logo-btn');
         logoBtn.addEventListener('touchstart', () => { pressTimer = setTimeout(openAdminPanel, 1500); });
@@ -384,6 +384,8 @@
             currentChallenge = challenge;
             currentMerkleRoot = merkle_root;
 
+            const workerComm = activeWorker ? activeWorker.commitment : (workersList[0] ? workersList[0].commitment : "");
+
             currentIntent = {
                 action: "DISPATCH_BATCH",
                 item: selectedDish.id,
@@ -391,18 +393,17 @@
                 unit_price: selectedDish.price,
                 portions: selectedPortionsCount,
                 temperature: selectedTemperature,
-                worker_commitment: activeWorker ? activeWorker.commitment : "",
-                requested_at: Date.now() / 1000
+                worker_commitment: workerComm,
+                requested_at: Math.floor(Date.now() / 1000)
             };
 
             document.getElementById('fp-worker-info').innerText = "Operátor: " + (activeWorker ? activeWorker.alias : "ZK-Anonym");
             document.getElementById('dialog-fingerprint').classList.remove('hidden');
 
-            // Kanonický ZK Payload svázaný s Merkle stromem
-            const canonicalPayload = JSON.stringify(currentIntent) + ":" + currentChallenge + ":" + currentMerkleRoot;
+            currentCanonicalPayload = JSON.stringify(currentIntent) + ":" + currentChallenge + ":" + currentMerkleRoot;
 
             if (window.AndroidBridge && typeof window.AndroidBridge.authenticateAndSign === 'function') {
-                window.AndroidBridge.authenticateAndSign(canonicalPayload);
+                window.AndroidBridge.authenticateAndSign(currentCanonicalPayload);
             }
         }
 
@@ -418,6 +419,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     intent: currentIntent,
+                    canonical_payload: currentCanonicalPayload,
                     fido_id: publicKeyBase64,
                     challenge: currentChallenge,
                     signature: signatureBase64
