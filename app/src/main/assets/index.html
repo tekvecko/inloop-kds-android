@@ -27,19 +27,18 @@
         }
 
         .atm-header {
-            display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.6rem;
+            display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.8rem;
             background: #08101e; border-bottom: 2px solid var(--btn-border); margin-bottom: 0.4rem;
         }
-        .atm-logo { font-size: 0.95rem; font-weight: 900; color: #fff; cursor: pointer; }
+        .atm-logo { font-size: 0.95rem; font-weight: 900; letter-spacing: 1px; color: #fff; cursor: pointer; }
         .atm-logo span { color: var(--cyan); }
 
-        /* ATM Přepínač hlavních režimů */
         .mode-nav { display: flex; gap: 0.3rem; }
         .btn-mode {
             background: var(--btn-bg); border: 1px solid var(--btn-border); color: var(--text-dim);
             padding: 0.35rem 0.6rem; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer; text-transform: uppercase;
         }
-        .btn-mode.active { background: rgba(0, 210, 255, 0.18); border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 10px var(--cyan-glow); }
+        .btn-mode.active { background: rgba(0, 210, 255, 0.18); border-color: var(--cyan); color: var(--cyan); }
 
         .atm-screen {
             flex: 1; background: var(--screen-bg); border: 2px solid var(--btn-border); border-radius: 14px;
@@ -50,7 +49,6 @@
         .step-num { font-size: 0.68rem; font-weight: 800; color: var(--cyan); text-transform: uppercase; }
         .step-title { font-size: 1.15rem; font-weight: 900; color: #fff; margin-top: 0.1rem; }
 
-        /* Krok 1 Menu */
         .atm-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; flex: 1; align-content: stretch; }
         .atm-tile {
             background: var(--btn-bg); border: 2px solid var(--btn-border); border-radius: 12px;
@@ -61,7 +59,6 @@
         .tile-name { font-size: 0.95rem; font-weight: 800; color: #fff; line-height: 1.25; margin: 0.2rem 0; }
         .tile-price { font-size: 0.8rem; font-weight: 700; color: var(--green); }
 
-        /* Krok 2 Porce */
         .atm-portions-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; flex: 1; align-content: center; }
         .atm-btn-amount {
             background: var(--btn-bg); border: 2px solid var(--btn-border); color: #fff; font-size: 1.4rem; font-weight: 900;
@@ -69,7 +66,6 @@
         }
         .atm-btn-amount.selected { border-color: var(--cyan); background: var(--cyan); color: #000; box-shadow: 0 0 20px var(--cyan-glow); }
 
-        /* Krok 3 Teplota */
         .temp-display-box {
             background: #000; border: 2px solid var(--green); border-radius: 14px; padding: 1rem; text-align: center;
             margin: auto; width: 100%; max-width: 320px; box-shadow: 0 0 25px var(--green-glow);
@@ -93,21 +89,6 @@
             border-radius: 10px; padding: 1rem; font-size: 0.95rem; font-weight: 800; cursor: pointer;
         }
 
-        /* Seznamy pro Objednávky & Feed */
-        .list-view-container {
-            flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.2rem;
-        }
-        .list-card {
-            background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 10px;
-            padding: 0.75rem; display: flex; justify-content: space-between; align-items: center;
-        }
-        .list-card-title { font-size: 0.9rem; font-weight: 800; color: #fff; }
-        .list-card-meta { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.15rem; }
-        .btn-quick-dispatch {
-            background: linear-gradient(135deg, #38bdf8, #2563eb); color: #000; font-weight: 900; border: none;
-            padding: 0.5rem 0.8rem; border-radius: 8px; font-size: 0.75rem; cursor: pointer;
-        }
-
         .overlay {
             position: fixed; inset: 0; background: rgba(3, 7, 18, 0.94); backdrop-filter: blur(25px);
             z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 1.2rem; text-align: center;
@@ -119,6 +100,13 @@
         .dialog-btn {
             background: var(--cyan); color: #000; border: none; border-radius: 10px; padding: 0.85rem; width: 100%; font-size: 0.95rem; font-weight: 900; cursor: pointer; text-transform: uppercase; margin-top: 0.6rem;
         }
+
+        .worker-pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.8rem 0; }
+        .btn-worker-pick {
+            background: var(--btn-bg); border: 2px solid var(--btn-border); color: #fff; padding: 1rem 0.5rem;
+            border-radius: 12px; font-size: 1rem; font-weight: 800; cursor: pointer; text-align: center;
+        }
+        .btn-worker-pick:active { border-color: var(--cyan); background: var(--cyan); color: #000; }
     </style>
 </head>
 <body>
@@ -127,8 +115,7 @@
         <div class="atm-logo" id="secret-logo-btn">INLOOP <span>ATM-KDS</span></div>
         <div class="mode-nav">
             <button class="btn-mode active" id="tab-atm" onclick="setMainMode('ATM')">⚡ Expedice</button>
-            <button class="btn-mode" id="tab-orders" onclick="setMainMode('ORDERS')">📋 Objednávky (<span id="count-orders">0</span>)</button>
-            <button class="btn-mode" id="tab-feed" onclick="setMainMode('FEED')">📜 Vydáno (<span id="count-feed">0</span>)</button>
+            <button class="btn-mode" id="tab-feed" onclick="setMainMode('FEED')">📜 Vydáno</button>
         </div>
     </div>
 
@@ -182,52 +169,38 @@
         </div>
     </div>
 
-    <!-- 2. POHLED: B2B OBJEDNÁVKY -->
-    <div id="view-orders" class="atm-screen" style="display:none;">
-        <div class="step-title-box">
-            <div class="step-num">FRONTA PŘÍCHOZÍCH OBJEDNÁVEK</div>
-            <div class="step-title">B2B OBJEDNÁVKY Z PORTÁLU</div>
-        </div>
-        <div class="list-view-container" id="orders-list-container"></div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.4rem;">
-            <a href="/portal" target="_blank" style="color:var(--cyan); font-size:0.8rem; font-weight:700; text-decoration:none;">Otevřít B2B Portál ↗</a>
-            <button class="btn-mode active" onclick="setMainMode('ATM')">PŘEJÍT NA EXPEDICI ➔</button>
-        </div>
-    </div>
-
-    <!-- 3. POHLED: KRYSTALICKÝ FEED VYDANÝCH VÁREK -->
+    <!-- 2. POHLED: KRYSTALICKÝ FEED -->
     <div id="view-feed" class="atm-screen" style="display:none;">
         <div class="step-title-box">
             <div class="step-num">KRYSTALICKÝ AUDITNÍ DENÍK</div>
             <div class="step-title">EXPEDOVANÉ & ZAPEČETĚNÉ VÁRKY</div>
         </div>
-        <div class="list-view-container" id="feed-list-container"></div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.4rem;">
+        <div style="flex:1; overflow-y:auto;" id="feed-list-container"></div>
+        <div style="display:flex; justify-content:space-between; margin-top:0.4rem;">
             <a href="/audit" target="_blank" style="color:var(--cyan); font-size:0.8rem; font-weight:700; text-decoration:none;">Úřední certifikát ↗</a>
-            <a href="/api/export/pohoda.xml" target="_blank" style="color:var(--green); font-size:0.8rem; font-weight:700; text-decoration:none;">Pohoda XML ↗</a>
+            <button class="btn-mode active" onclick="setMainMode('ATM')">ZPĚT NA EXPEDICI ➔</button>
+        </div>
+    </div>
+
+    <!-- DIALOG: VÝBĚR PRACOVNÍKA & PŘILOŽENÍ PRSTU -->
+    <div id="dialog-fingerprint" class="overlay hidden">
+        <div class="atm-dialog" style="text-align:center;">
+            <div style="font-size:3rem; margin-bottom:0.3rem;">👆</div>
+            <h3 style="color:#fff; margin-bottom:0.2rem;">KDO EXPEDUJE VÁRKU?</h3>
+            <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:0.6rem;">Zvolte své jméno a přiložte prst k hardwarovému senzoru:</p>
+            <div class="worker-pick-grid" id="worker-auth-picker"></div>
+            <button class="dialog-btn" style="background:#ff3366; color:#fff;" onclick="cancelFingerprint()">ZRUŠIT</button>
         </div>
     </div>
 
     <!-- SKRYTÝ MASTER PANEL -->
     <div id="dialog-admin" class="overlay hidden">
         <div class="atm-dialog">
-            <h3 style="color:#fff; margin-bottom:0.6rem;">ZK IDENTITNÍ TREZOR</h3>
-            <label style="font-size:0.75rem; color:#fff; font-weight:700;">Jméno pracovníka:</label>
+            <h3 style="color:#fff; margin-bottom:0.6rem;">ZK TREZOR ZAMĚSTNANCŮ</h3>
+            <label style="font-size:0.75rem; color:#fff; font-weight:700;">Jméno nového pracovníka:</label>
             <input type="text" id="new-worker-name" placeholder="Např. Petr Novák" style="width:100%; background:#000; border:1px solid var(--btn-border); color:#fff; padding:0.6rem; border-radius:6px; margin:0.3rem 0 0.8rem 0;">
-            <button class="dialog-btn" onclick="saveNewWorker()">✦ VYGENEROVAT ZK COMMITMENT</button>
+            <button class="dialog-btn" onclick="saveNewWorker()">✦ ZAREGISTROVAT PRACOVNÍKA</button>
             <button class="dialog-btn" style="background:transparent; border:1px solid rgba(255,255,255,0.2); color:#fff;" onclick="closeAdminDialog()">ZAVŘÍT</button>
-        </div>
-    </div>
-
-    <!-- DIALOG: BIOMETRIE -->
-    <div id="dialog-fingerprint" class="overlay hidden">
-        <div class="atm-dialog" style="text-align:center;">
-            <div style="font-size:3rem; margin-bottom:0.5rem;">👆</div>
-            <h3 style="color:#fff; margin-bottom:0.4rem;">PŘILOŽTE PRST</h3>
-            <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:1rem;" id="fp-worker-info">
-                Generování ZK-Nullifieru v TEE procesoru
-            </p>
-            <button class="dialog-btn" style="background:#ff3366; color:#fff;" onclick="cancelFingerprint()">ZRUŠIT</button>
         </div>
     </div>
 
@@ -242,11 +215,9 @@
     </div>
 
     <script>
-        let activeTab = "ATM";
         let currentStep = 1;
         let menuItems = [];
         let workersList = [];
-        let activeWorker = null;
         let selectedDish = null;
         let selectedPortionsCount = 45;
         let selectedTemperature = 76.5;
@@ -259,24 +230,20 @@
 
         function setMainMode(mode) {
             haptic(25);
-            activeTab = mode;
             document.getElementById('view-atm').style.display = mode === 'ATM' ? 'flex' : 'none';
-            document.getElementById('view-orders').style.display = mode === 'ORDERS' ? 'flex' : 'none';
             document.getElementById('view-feed').style.display = mode === 'FEED' ? 'flex' : 'none';
-
             document.getElementById('tab-atm').classList.toggle('active', mode === 'ATM');
-            document.getElementById('tab-orders').classList.toggle('active', mode === 'ORDERS');
             document.getElementById('tab-feed').classList.toggle('active', mode === 'FEED');
-
-            if (mode === 'ORDERS') loadOrders();
             if (mode === 'FEED') loadFeed();
         }
 
-        function loadWorkers() {
-            fetch('/api/workers').then(r => r.json()).then(list => {
-                workersList = list;
-                if (!activeWorker && list.length > 0) activeWorker = list[0];
-            });
+        async function loadWorkers() {
+            try {
+                const r = await fetch('/api/workers');
+                workersList = await r.json();
+            } catch(e) {
+                workersList = [];
+            }
         }
 
         function loadMenu() {
@@ -292,7 +259,6 @@
             menuItems.forEach((item, idx) => {
                 const isSelected = (!selectedDish && idx === 0) || (selectedDish && selectedDish.id === item.id);
                 if (isSelected) selectedDish = item;
-
                 grid.innerHTML += `
                     <div class="atm-tile ${isSelected ? 'selected' : ''}" onclick="pickDish('${item.id}', this)">
                         <div class="tile-id">${item.id}</div>
@@ -321,11 +287,9 @@
             haptic(25);
             selectedTemperature = Math.round((selectedTemperature + delta) * 10) / 10;
             document.getElementById('disp-temp').innerText = selectedTemperature.toFixed(1) + " °C";
-
             const ok = selectedTemperature >= 65.0;
             const box = document.getElementById('temp-box');
             const status = document.getElementById('disp-haccp-ok');
-
             if (ok) {
                 box.style.borderColor = "var(--green)";
                 status.style.color = "var(--green)";
@@ -341,9 +305,7 @@
             document.getElementById('step-1').style.display = currentStep === 1 ? 'block' : 'none';
             document.getElementById('step-2').style.display = currentStep === 2 ? 'block' : 'none';
             document.getElementById('step-3').style.display = currentStep === 3 ? 'block' : 'none';
-
             document.getElementById('btn-back').style.display = currentStep > 1 ? 'block' : 'none';
-
             const nextBtn = document.getElementById('btn-next');
             if (currentStep === 3) {
                 nextBtn.innerText = "EXPEDOVAT (OTISK) ➔";
@@ -358,7 +320,7 @@
             haptic(35);
             if (currentStep === 1) { currentStep = 2; updateStepView(); }
             else if (currentStep === 2) { currentStep = 3; updateStepView(); }
-            else if (currentStep === 3) { triggerBiometrics(); }
+            else if (currentStep === 3) { openWorkerPicker(); }
         }
 
         function prevStep() {
@@ -366,18 +328,41 @@
             if (currentStep > 1) { currentStep--; updateStepView(); }
         }
 
-        async function triggerBiometrics() {
+        async function openWorkerPicker() {
             if (selectedTemperature < 65.0) {
                 alert("HACCP STOP: Teplota pod 65.0 °C!");
                 return;
             }
+
+            await loadWorkers();
 
             const cRes = await fetch('/api/auth/challenge');
             const { challenge, merkle_root } = await cRes.json();
             currentChallenge = challenge;
             currentMerkleRoot = merkle_root;
 
-            const workerComm = activeWorker ? activeWorker.commitment : (workersList[0] ? workersList[0].commitment : "");
+            if (workersList.length <= 1) {
+                const singleWorker = workersList[0] || { commitment: "", alias: "Šéfkuchař" };
+                executeBiometricsForWorker(singleWorker.commitment, singleWorker.alias);
+                return;
+            }
+
+            const grid = document.getElementById('worker-auth-picker');
+            grid.innerHTML = '';
+
+            workersList.forEach(w => {
+                grid.innerHTML += `
+                    <button class="btn-worker-pick" onclick="executeBiometricsForWorker('${w.commitment}', '${w.alias}')">
+                        ${w.alias}
+                    </button>
+                `;
+            });
+
+            document.getElementById('dialog-fingerprint').classList.remove('hidden');
+        }
+
+        function executeBiometricsForWorker(comm, alias) {
+            document.getElementById('dialog-fingerprint').classList.add('hidden');
 
             currentIntent = {
                 action: "DISPATCH_BATCH",
@@ -386,12 +371,9 @@
                 unit_price: selectedDish.price,
                 portions: selectedPortionsCount,
                 temperature: selectedTemperature,
-                worker_commitment: workerComm,
+                worker_commitment: comm,
                 requested_at: Math.floor(Date.now() / 1000)
             };
-
-            document.getElementById('fp-worker-info').innerText = "Operátor: " + (activeWorker ? activeWorker.alias : "ZK-Anonym");
-            document.getElementById('dialog-fingerprint').classList.remove('hidden');
 
             currentCanonicalPayload = JSON.stringify(currentIntent) + ":" + currentChallenge + ":" + currentMerkleRoot;
 
@@ -405,8 +387,6 @@
         }
 
         window.onBiometricSuccess = async function(signatureBase64, publicKeyBase64) {
-            document.getElementById('dialog-fingerprint').classList.add('hidden');
-
             const res = await fetch('/api/crystallize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -423,14 +403,12 @@
             if (r.ui_feedback === "SUCCESS") {
                 haptic([50, 50, 50]);
                 document.getElementById('dialog-success').classList.remove('hidden');
-                loadFeed();
             } else {
                 alert("Kryptografická chyba: " + r.message);
             }
         };
 
         window.onBiometricError = function(msg) {
-            document.getElementById('dialog-fingerprint').classList.add('hidden');
             alert("Biometrie: " + msg);
         };
 
@@ -440,71 +418,23 @@
             updateStepView();
         }
 
-        // ---------------------------------------------------------------------
-        // Načítání B2B Objednávek a Krystalického Feedu
-        // ---------------------------------------------------------------------
-        function loadOrders() {
-            fetch('/api/portal/summary').then(r => r.json()).then(data => {
-                const orders = data.orders || [];
-                document.getElementById('count-orders').innerText = orders.length;
-                const container = document.getElementById('orders-list-container');
-                container.innerHTML = '';
-                if (orders.length === 0) {
-                    container.innerHTML = '<div style="text-align:center; color:var(--text-dim); padding:2rem;">Žádné čekající objednávky.</div>';
-                    return;
-                }
-                orders.slice().reverse().forEach(o => {
-                    container.innerHTML += `
-                        <div class="list-card">
-                            <div>
-                                <div class="list-card-title">${o.company} • ${o.dish_name}</div>
-                                <div class="list-card-meta">Počet: <b>${o.portions || 1} ks</b> | ${o.price} Kč</div>
-                            </div>
-                            <button class="btn-quick-dispatch" onclick="quickDispatchOrder('${o.dish_id}', ${o.portions || 1})">EXPEDOVAT</button>
-                        </div>
-                    `;
-                });
-            }).catch(e => {});
-        }
-
-        function quickDispatchOrder(dishId, portionsCount) {
-            const found = menuItems.find(m => m.id === dishId);
-            if (found) {
-                selectedDish = found;
-                selectedPortionsCount = portionsCount;
-                currentStep = 3;
-                setMainMode('ATM');
-                updateStepView();
-            }
-        }
-
         function loadFeed() {
             fetch('/api/records').then(r => r.json()).then(data => {
                 const recs = data.records || [];
-                document.getElementById('count-feed').innerText = recs.length;
                 const container = document.getElementById('feed-list-container');
                 container.innerHTML = '';
-                if (recs.length === 0) {
-                    container.innerHTML = '<div style="text-align:center; color:var(--text-dim); padding:2rem;">Zatím žádné zapečetěné záznamy.</div>';
-                    return;
-                }
                 recs.slice().reverse().forEach(r => {
                     const it = r.intent;
                     const time = new Date(r.bitemporal.transaction_time * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
                     container.innerHTML += `
-                        <div class="list-card">
-                            <div>
-                                <div class="list-card-title">${it.item_name} (${it.portions} ks)</div>
-                                <div class="list-card-meta">${it.temperature} °C • ${time} • ZK Nullifier: <code>${(it.zk_nullifier || "").take ? it.zk_nullifier.take(10) : it.zk_nullifier.substring(0,10)}...</code></div>
-                            </div>
-                            <div style="color:var(--green); font-weight:800; font-size:0.75rem;">ZAPEČETĚNO</div>
+                        <div style="background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:10px; padding:0.7rem; margin-bottom:0.5rem;">
+                            <b>${it.item_name}</b> (${it.portions} ks) • ${it.temperature} °C • ${time}
                         </div>
                     `;
                 });
-            }).catch(e => {});
+            });
         }
 
-        // Skrytý Trezor šéfkuchaře
         let pressTimer = null;
         const logoBtn = document.getElementById('secret-logo-btn');
         logoBtn.addEventListener('touchstart', () => { pressTimer = setTimeout(() => { document.getElementById('dialog-admin').classList.remove('hidden'); }, 1500); });
@@ -529,9 +459,6 @@
 
         loadMenu();
         loadWorkers();
-        loadOrders();
-        loadFeed();
-        setInterval(() => { loadOrders(); loadFeed(); }, 3000);
     </script>
 </body>
 </html>
