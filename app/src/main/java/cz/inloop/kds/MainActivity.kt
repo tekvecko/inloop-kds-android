@@ -1,13 +1,17 @@
 package cz.inloop.kds
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.View
 import android.view.WindowManager
 import android.webkit.*
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -73,11 +77,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Zpětné tlačítko Androidu (Systémový Back Callback)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                webView.evaluateJavascript("window.onAndroidBackPressed();") { result ->
+                    if (result == "\"HANDLED_BY_JS\"") {
+                        // Ošetřeno v JavaScriptu
+                    } else if (webView.canGoBack()) {
+                        webView.goBack()
+                    } else {
+                        // Minimalizace aplikace místo zavření
+                        moveTaskToBack(true)
+                    }
+                }
+            }
+        })
+
         webView.loadUrl("http://127.0.0.1:$port")
     }
 
     private fun showBiometricPrompt(signature: Signature, payload: String, isEnrollment: Boolean = false) {
-        val title = if (isEnrollment) "Registrace otisku šéfkuchaře" else "Autorizace výdeje (InLoop TEE)"
+        val title = if (isEnrollment) "Registrace otisku v TEE" else "Autorizace výdeje (InLoop TEE)"
         val subtitle = if (isEnrollment) "Přiložte prst pro ukování TEE klíče" else "Přiložte prst pro zapečetění várky"
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
@@ -140,6 +160,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     inner class WebAppInterface {
+        @JavascriptInterface
+        fun openSystemBiometricSettings() {
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val enrollIntent = Intent(Settings.ACTION_BIOMETRIC_ENROLL).apply {
+                            putExtra(Settings.EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED,
+                                BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                        }
+                        startActivity(enrollIntent)
+                    } else {
+                        startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+                    }
+                } catch (e: Exception) {
+                    try {
+                        startActivity(Intent(Settings.ACTION_SETTINGS))
+                    } catch (ex: Exception) {
+                        Toast.makeText(this@MainActivity, "Nelze otevřít nastavení", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
         @JavascriptInterface
         fun enrollChefKey() {
             Handler(Looper.getMainLooper()).post {

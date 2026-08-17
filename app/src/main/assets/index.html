@@ -26,7 +26,6 @@
             height: 100dvh; display: flex; flex-direction: column; padding: 0.4rem; overflow: hidden;
         }
 
-        /* 4 Hlavní Záložky v horní liště */
         .stage-nav-bar {
             display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; margin-bottom: 0.4rem;
         }
@@ -50,7 +49,6 @@
         .step-num { font-size: 0.68rem; font-weight: 800; color: var(--cyan); text-transform: uppercase; }
         .step-title { font-size: 1.15rem; font-weight: 900; color: #fff; margin-top: 0.1rem; }
 
-        /* ATM Výdej */
         .atm-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; flex: 1; align-content: stretch; }
         .atm-tile {
             background: var(--btn-bg); border: 2px solid var(--btn-border); border-radius: 12px;
@@ -91,7 +89,6 @@
             border-radius: 10px; padding: 1rem; font-size: 0.95rem; font-weight: 800; cursor: pointer;
         }
 
-        /* Karty Příjmu a Přípravy */
         .cards-list-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
         .order-card {
             background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 12px;
@@ -120,6 +117,15 @@
             background: var(--btn-bg); border: 2px solid var(--btn-border); color: #fff; padding: 1rem 0.5rem;
             border-radius: 12px; font-size: 1rem; font-weight: 800; cursor: pointer; text-align: center;
         }
+
+        /* Seznam pracovníků v administraci */
+        .admin-worker-row {
+            display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3);
+            border: 1px solid var(--btn-border); padding: 0.5rem 0.8rem; border-radius: 8px; margin-bottom: 0.4rem;
+        }
+        .btn-delete-worker {
+            background: var(--red); color: #fff; border: none; border-radius: 6px; padding: 0.3rem 0.6rem; font-weight: 800; font-size: 0.75rem; cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -132,20 +138,20 @@
         <button class="btn-stage" id="tab-disp" onclick="switchStage('DISP')">4. Expedice <span class="stage-badge" id="badge-disp">0</span></button>
     </div>
 
-    <!-- 1. FÁZE: PŘÍJEM (Nové objednávky z B2B portálu) -->
+    <!-- 1. FÁZE: PŘÍJEM -->
     <div id="view-inbox" class="stage-screen">
         <div class="step-title-box">
-            <div class="step-num">1. FÁZE: PŘÍJEM OBJEDNÁVEK</div>
+            <div class="step-num" id="secret-logo-btn">1. FÁZE: PŘÍJEM OBJEDNÁVEK ⚙</div>
             <div class="step-title">NOVÉ OBJEDNÁVKY K POTVRZENÍ</div>
         </div>
         <div class="cards-list-container" id="inbox-list"></div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.4rem;">
             <a href="/portal" target="_blank" style="color:var(--cyan); font-size:0.8rem; font-weight:700; text-decoration:none;">Otevřít B2B Portál ↗</a>
-            <span style="font-size:0.75rem; color:var(--text-dim);">Automatická synchronizace</span>
+            <span style="font-size:0.75rem; color:var(--text-dim);">Dlouhý stisk záhlaví = Trezor</span>
         </div>
     </div>
 
-    <!-- 2. FÁZE: PŘÍPRAVA (Kuchař vaří / kompletuje) -->
+    <!-- 2. FÁZE: PŘÍPRAVA -->
     <div id="view-prep" class="stage-screen" style="display:none;">
         <div class="step-title-box">
             <div class="step-num">2. FÁZE: PŘÍPRAVA & VAŘENÍ</div>
@@ -157,7 +163,7 @@
         </div>
     </div>
 
-    <!-- 3. FÁZE: VÝDEJ (ATM pult + HACCP měření + TEE podpis) -->
+    <!-- 3. FÁZE: VÝDEJ -->
     <div id="view-pass" class="stage-screen" style="display:none;">
         <div id="step-1" class="step-view">
             <div class="step-title-box">
@@ -207,7 +213,7 @@
         </div>
     </div>
 
-    <!-- 4. FÁZE: EXPEDICE (Zapečetěné záznamy & Tisk) -->
+    <!-- 4. FÁZE: EXPEDICE -->
     <div id="view-disp" class="stage-screen" style="display:none;">
         <div class="step-title-box">
             <div class="step-num">4. FÁZE: EXPEDICE & AUDIT</div>
@@ -228,6 +234,29 @@
             <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:0.6rem;">Zvolte své jméno a přiložte prst k senzoru:</p>
             <div class="worker-pick-grid" id="worker-auth-picker"></div>
             <button class="dialog-btn" style="background:#ff3366; color:#fff;" onclick="cancelFingerprint()">ZRUŠIT</button>
+        </div>
+    </div>
+
+    <!-- SKRYTÝ TREZOR ŠÉFKUCHAŘE & SPRÁVA OTISKŮ -->
+    <div id="dialog-admin" class="overlay hidden">
+        <div class="atm-dialog">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
+                <h3 style="color:#fff; font-size:1.1rem;">TREZOR ŠÉFKUCHAŘE</h3>
+                <span style="color:var(--cyan); font-size:0.75rem; font-weight:800;">SPRÁVA OTISKŮ</span>
+            </div>
+
+            <!-- Tlačítko pro přímý přechod do nastavení otisků Androidu -->
+            <button class="dialog-btn" style="background:var(--green); margin-bottom:1rem;" onclick="openSystemBiometrics()">
+                ⚙ SPRÁVA OTISKŮ PRSTŮ V ANDROIDU ↗
+            </button>
+
+            <h4 style="color:#fff; font-size:0.85rem; margin-bottom:0.4rem;">Registrovaní pracovníci směny:</h4>
+            <div id="admin-workers-list" style="max-height:180px; overflow-y:auto; margin-bottom:0.8rem;"></div>
+
+            <h4 style="color:#fff; font-size:0.85rem; margin-bottom:0.4rem;">Přidat nového pracovníka:</h4>
+            <input type="text" id="new-worker-name" placeholder="Jméno a příjmení" style="width:100%; background:#000; border:1px solid var(--btn-border); color:#fff; padding:0.6rem; border-radius:6px; margin-bottom:0.4rem;">
+            <button class="dialog-btn" onclick="saveNewWorker()">✦ ZAREGISTROVAT PRACOVNÍKA</button>
+            <button class="dialog-btn" style="background:transparent; border:1px solid rgba(255,255,255,0.2); color:#fff;" onclick="closeAdminDialog()">ZAVŘÍT</button>
         </div>
     </div>
 
@@ -257,6 +286,39 @@
 
         const haptic = (p = [35]) => { if (navigator.vibrate) navigator.vibrate(p); };
 
+        // ---------------------------------------------------------------------
+        // Obsluha systémového tlačítka Zpět z Androidu
+        // ---------------------------------------------------------------------
+        window.onAndroidBackPressed = function() {
+            // 1. Pokud je otevřen dialog, zavřeme ho
+            if (!document.getElementById('dialog-fingerprint').classList.contains('hidden')) {
+                cancelFingerprint();
+                return "HANDLED_BY_JS";
+            }
+            if (!document.getElementById('dialog-admin').classList.contains('hidden')) {
+                closeAdminDialog();
+                return "HANDLED_BY_JS";
+            }
+            if (!document.getElementById('dialog-success').classList.contains('hidden')) {
+                resetToStep1();
+                return "HANDLED_BY_JS";
+            }
+
+            // 2. Pokud jsme ve fázi výdeje a v kroku 2 nebo 3, vrátíme se o krok zpět
+            if (currentStage === 'PASS' && currentStep > 1) {
+                prevStep();
+                return "HANDLED_BY_JS";
+            }
+
+            // 3. Pokud jsme v jiné záložce než Příjem, vrátíme se na Příjem
+            if (currentStage !== 'INBOX') {
+                switchStage('INBOX');
+                return "HANDLED_BY_JS";
+            }
+
+            return "ALLOW_APP_MINIMIZE";
+        };
+
         function switchStage(stage) {
             haptic(25);
             currentStage = stage;
@@ -278,7 +340,42 @@
             try {
                 const r = await fetch('/api/workers');
                 workersList = await r.json();
+                renderAdminWorkers();
             } catch(e) { workersList = []; }
+        }
+
+        function renderAdminWorkers() {
+            const container = document.getElementById('admin-workers-list');
+            if (!container) return;
+            container.innerHTML = '';
+            workersList.forEach(w => {
+                container.innerHTML += `
+                    <div class="admin-worker-row">
+                        <div>
+                            <b style="color:#fff; font-size:0.85rem;">${w.alias}</b>
+                            <span style="color:var(--text-dim); font-size:0.7rem; display:block;">${w.role}</span>
+                        </div>
+                        <button class="btn-delete-worker" onclick="deleteWorker('${w.commitment}')">Smazat</button>
+                    </div>
+                `;
+            });
+        }
+
+        function deleteWorker(comm) {
+            if (!confirm("Opravdu chcete odebrat tohoto pracovníka?")) return;
+            fetch('/api/workers/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ commitment: comm })
+            }).then(() => loadWorkers());
+        }
+
+        function openSystemBiometrics() {
+            if (window.AndroidBridge && typeof window.AndroidBridge.openSystemBiometricSettings === 'function') {
+                window.AndroidBridge.openSystemBiometricSettings();
+            } else {
+                alert("Otevřete Nastavení Androidu -> Zabezpečení -> Otisk prstu.");
+            }
         }
 
         function loadMenu() {
@@ -455,9 +552,6 @@
             switchStage('DISP');
         }
 
-        // ---------------------------------------------------------------------
-        // Workflow operace mezi fázemi (Příjem -> Příprava -> Výdej -> Expedice)
-        // ---------------------------------------------------------------------
         function moveOrderToPrep(orderId) {
             haptic(25);
             fetch('/api/orders/transition', {
@@ -481,7 +575,6 @@
         }
 
         function refreshData() {
-            // 1. Načtení B2B objednávek
             fetch('/api/portal/summary').then(r => r.json()).then(data => {
                 const orders = data.orders || [];
                 const inbox = orders.filter(o => !o.stage || o.stage === 'RECEIVED');
@@ -490,7 +583,6 @@
                 document.getElementById('badge-inbox').innerText = inbox.length;
                 document.getElementById('badge-prep').innerText = prep.length;
 
-                // Render Příjem
                 const inboxContainer = document.getElementById('inbox-list');
                 inboxContainer.innerHTML = '';
                 if (inbox.length === 0) {
@@ -509,7 +601,6 @@
                     });
                 }
 
-                // Render Příprava
                 const prepContainer = document.getElementById('prep-list');
                 prepContainer.innerHTML = '';
                 if (prep.length === 0) {
@@ -529,7 +620,6 @@
                 }
             }).catch(e => {});
 
-            // 2. Načtení Expedice
             fetch('/api/records').then(r => r.json()).then(data => {
                 const recs = data.records || [];
                 document.getElementById('badge-disp').innerText = recs.length;
@@ -553,6 +643,29 @@
                     });
                 }
             }).catch(e => {});
+        }
+
+        // Skrytý Trezor: dlouhý stisk záhlaví 1. FÁZE
+        let pressTimer = null;
+        const logoBtn = document.getElementById('secret-logo-btn');
+        logoBtn.addEventListener('touchstart', () => { pressTimer = setTimeout(() => { document.getElementById('dialog-admin').classList.remove('hidden'); loadWorkers(); }, 1500); });
+        logoBtn.addEventListener('touchend', () => { clearTimeout(pressTimer); });
+        logoBtn.addEventListener('mousedown', () => { pressTimer = setTimeout(() => { document.getElementById('dialog-admin').classList.remove('hidden'); loadWorkers(); }, 1500); });
+        logoBtn.addEventListener('mouseup', () => { clearTimeout(pressTimer); });
+
+        function closeAdminDialog() { document.getElementById('dialog-admin').classList.add('hidden'); }
+
+        function saveNewWorker() {
+            const name = document.getElementById('new-worker-name').value.trim();
+            if (!name) return;
+            fetch('/api/workers/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name })
+            }).then(() => {
+                document.getElementById('new-worker-name').value = '';
+                loadWorkers();
+            });
         }
 
         loadMenu();

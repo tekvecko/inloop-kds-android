@@ -280,7 +280,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 val body = readJsonBody(session)
                 body.put("created_at", System.currentTimeMillis() / 1000.0)
                 body.put("order_id", "ORD_" + System.currentTimeMillis().toString().takeLast(6))
-                body.put("stage", "RECEIVED") // Výchozí stav: Příjem
+                body.put("stage", "RECEIVED")
                 b2bOrders.add(body)
                 saveB2bOrders()
                 newFixedLengthResponse(Status.OK, mimeJson, "{\"status\":\"SUCCESS\",\"message\":\"Objednávka přijata do příjmu.\"}")
@@ -293,7 +293,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
             uri == "/api/orders/transition" && method == Method.POST -> {
                 val body = readJsonBody(session)
                 val orderId = body.optString("order_id")
-                val targetStage = body.optString("stage") // PREPARING nebo DISPATCHED
+                val targetStage = body.optString("stage")
 
                 var updated = false
                 for (o in b2bOrders) {
@@ -307,7 +307,7 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                     saveB2bOrders()
                     newFixedLengthResponse(Status.OK, mimeJson, "{\"status\":\"SUCCESS\"}")
                 } else {
-                    newFixedLengthResponse(Status.NOT_FOUND, mimeJson, "{\"status\":\"ERROR\",\"message\":\"Objednávka nenalezena\"}")
+                    newFixedLengthResponse(Status.NOT_FOUND, mimeJson, "{\"status\":\"ERROR\"}")
                 }
             }
             uri == "/api/workers" && method == Method.GET -> {
@@ -340,6 +340,15 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
                 workersFile.writeText(arr.toString(2), Charsets.UTF_8)
 
                 newFixedLengthResponse(Status.OK, mimeJson, "{\"status\":\"SUCCESS\",\"commitment\":\"$comm\"}")
+            }
+            uri == "/api/workers/delete" && method == Method.POST -> {
+                val body = readJsonBody(session)
+                val commToDelete = body.optString("commitment")
+                zkWorkers.removeIf { it.getString("commitment") == commToDelete }
+                val arr = JSONArray()
+                zkWorkers.forEach { arr.put(it) }
+                workersFile.writeText(arr.toString(2), Charsets.UTF_8)
+                newFixedLengthResponse(Status.OK, mimeJson, "{\"status\":\"SUCCESS\"}")
             }
             uri == "/api/menu" && method == Method.GET -> {
                 val menuContent = if (menuFile.exists()) menuFile.readText(Charsets.UTF_8) else "[]"
@@ -404,7 +413,6 @@ class KdsEmbeddedServer(port: Int, private val context: Context) : NanoHTTPD("12
 
                         val stored = appendCrystalBin(crystal)
 
-                        // Pokud šlo o konkrétní B2B objednávku, označíme ji jako DISPATCHED
                         val linkedOrderId = intent.optString("order_id", "")
                         if (linkedOrderId.isNotEmpty()) {
                             b2bOrders.find { it.optString("order_id") == linkedOrderId }?.put("stage", "DISPATCHED")
